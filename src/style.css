@@ -1,0 +1,37 @@
+:root {
+  /* Bioluminescent deep-ocean palette. */
+  --abyss: #02040a;
+  --deep: #061229;
+  --glow-cyan: #3ff0d8;
+  --glow-blue: #4aa8ff;
+  --ink: #cfe8ff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--abyss);
+  color: var(--ink);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  overflow: hidden;
+}
+
+#ocean {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
