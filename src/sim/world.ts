@@ -40,6 +40,8 @@ export class World {
   readonly food: FoodField;
   readonly population: Population;
   tick = 0;
+  /** Cumulative number of food pellets eaten (instrumentation / metrics / HUD). */
+  foodConsumed = 0;
 
   private readonly foodRng: Rng;
   private readonly mutationRng: Rng;
@@ -128,6 +130,7 @@ export class World {
       if (bestIdx >= 0) {
         this.foodEaten[bestIdx] = 1;
         energy += cfg.foodEnergy;
+        this.foodConsumed++;
       }
       energy -= cfg.baseCost + cfg.moveCost * pop.speed[i]!;
       pop.energy[i] = energy;
