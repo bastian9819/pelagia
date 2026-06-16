@@ -1,15 +1,25 @@
 import { initGpu } from './device.js';
 import moveShader from './shaders/move.wgsl?raw';
+import brainShader from './shaders/brain_move.wgsl?raw';
 import renderShader from './shaders/render.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
+import { GENOME_SIZE } from '../sim/brain.js';
+
+export type BenchMode = 'move' | 'brain';
 
 /**
- * Phase 1.0 performance spike: N creatures wandering on the GPU, updated by a
- * compute shader and drawn with one instanced triangle each (state read
- * straight from the GPU buffer — no readback). Reports FPS so we can find the
- * render+compute ceiling before adding brains and the spatial grid.
+ * Phase 1.0/1.1 performance spike: N creatures on the GPU, drawn with one
+ * instanced triangle each (state read straight from the GPU buffer — no
+ * readback). `mode` selects the per-tick compute:
+ *   - 'move':  a cheap wander (render + buffer ceiling).
+ *   - 'brain': a full MLP forward pass per creature (the brain-eval cost).
+ * Reports FPS so we can find the ceiling before adding the spatial grid (1.2).
  */
-export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Promise<void> {
+export async function runGpuBenchmark(
+  canvas: HTMLCanvasElement,
+  requestedN: number,
+  mode: BenchMode,
+): Promise<void> {
   const { device, format } = await initGpu();
   const context = canvas.getContext('webgpu');
   if (!context) throw new Error('webgpu canvas context unavailable');
@@ -18,6 +28,13 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
   const width = DEFAULT_CONFIG.width;
   const height = DEFAULT_CONFIG.height;
 
+  // In brain mode the genome buffer dominates memory; cap N to the binding limit.
+  let n = requestedN;
+  if (mode === 'brain') {
+    const maxN = Math.floor(device.limits.maxStorageBufferBindingSize / (GENOME_SIZE * 4));
+    n = Math.min(n, maxN);
+  }
+
   // --- Buffers ---
   const stateData = new Float32Array(n * 4);
   const hueData = new Float32Array(n);
@@ -25,7 +42,6 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
     stateData[i * 4 + 0] = Math.random() * width;
     stateData[i * 4 + 1] = Math.random() * height;
     stateData[i * 4 + 2] = Math.random() * Math.PI * 2;
-    stateData[i * 4 + 3] = 0;
     hueData[i] = Math.random();
   }
   const stateBuf = device.createBuffer({
@@ -39,16 +55,27 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
   });
   device.queue.writeBuffer(hueBuf, 0, hueData);
 
-  const moveParams = new ArrayBuffer(32);
-  const moveF32 = new Float32Array(moveParams);
-  const moveU32 = new Uint32Array(moveParams);
-  moveF32[0] = width;
-  moveF32[1] = height;
-  moveF32[2] = 1; // dt
-  moveF32[3] = DEFAULT_CONFIG.maxSpeed;
-  moveF32[4] = DEFAULT_CONFIG.maxTurnRate;
-  moveU32[6] = n;
-  const moveUbo = device.createBuffer({
+  let weightsBuf: GPUBuffer | undefined;
+  if (mode === 'brain') {
+    const weightsData = new Float32Array(n * GENOME_SIZE);
+    for (let i = 0; i < weightsData.length; i++) weightsData[i] = (Math.random() * 2 - 1) * 1.0;
+    weightsBuf = device.createBuffer({
+      size: weightsData.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(weightsBuf, 0, weightsData);
+  }
+
+  const params = new ArrayBuffer(32);
+  const pf = new Float32Array(params);
+  const pu = new Uint32Array(params);
+  pf[0] = width;
+  pf[1] = height;
+  pf[2] = 1; // dt
+  pf[3] = DEFAULT_CONFIG.maxSpeed;
+  pf[4] = DEFAULT_CONFIG.maxTurnRate;
+  pu[6] = n;
+  const paramsUbo = device.createBuffer({
     size: 32,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
@@ -59,20 +86,25 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
   });
   const renderData = new Float32Array(8);
 
-  // --- Pipelines ---
-  const moveModule = device.createShaderModule({ code: moveShader });
-  const movePipeline = device.createComputePipeline({
-    layout: 'auto',
-    compute: { module: moveModule, entryPoint: 'main' },
+  // --- Compute pipeline (mode-dependent) ---
+  const computeModule = device.createShaderModule({
+    code: mode === 'brain' ? brainShader : moveShader,
   });
-  const moveBind = device.createBindGroup({
-    layout: movePipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: moveUbo } },
-      { binding: 1, resource: { buffer: stateBuf } },
-    ],
+  const computePipeline = device.createComputePipeline({
+    layout: 'auto',
+    compute: { module: computeModule, entryPoint: 'main' },
+  });
+  const computeEntries: GPUBindGroupEntry[] = [
+    { binding: 0, resource: { buffer: paramsUbo } },
+    { binding: 1, resource: { buffer: stateBuf } },
+  ];
+  if (weightsBuf) computeEntries.push({ binding: 2, resource: { buffer: weightsBuf } });
+  const computeBind = device.createBindGroup({
+    layout: computePipeline.getBindGroupLayout(0),
+    entries: computeEntries,
   });
 
+  // --- Render pipeline ---
   const renderModule = device.createShaderModule({ code: renderShader });
   const renderPipeline = device.createRenderPipeline({
     layout: 'auto',
@@ -109,13 +141,11 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
     canvas.width = cw;
     canvas.height = ch;
     const s = Math.min(cw / width, ch / height);
-    const oxPx = (cw - width * s) / 2;
-    const oyPx = (ch - height * s) / 2;
-    renderData[0] = (s / cw) * 2; // sx
-    renderData[1] = -(s / ch) * 2; // sy (flip)
-    renderData[2] = (oxPx / cw) * 2 - 1; // ox
-    renderData[3] = 1 - (oyPx / ch) * 2; // oy
-    renderData[4] = 5; // pointSize (world units)
+    renderData[0] = (s / cw) * 2;
+    renderData[1] = -(s / ch) * 2;
+    renderData[2] = ((cw - width * s) / 2 / cw) * 2 - 1;
+    renderData[3] = 1 - ((ch - height * s) / 2 / ch) * 2;
+    renderData[4] = 5; // pointSize
     renderData[5] = 0.9; // brightness
     device.queue.writeBuffer(renderUbo, 0, renderData);
   }
@@ -132,17 +162,16 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
   let frame = 0;
   let frames = 0;
   let lastFpsT = performance.now();
-  let fps = 0;
   const workgroups = Math.ceil(n / 256);
 
   function tick(): void {
-    moveU32[5] = frame;
-    device.queue.writeBuffer(moveUbo, 0, moveParams);
+    pu[5] = frame;
+    device.queue.writeBuffer(paramsUbo, 0, params);
 
     const encoder = device.createCommandEncoder();
     const cpass = encoder.beginComputePass();
-    cpass.setPipeline(movePipeline);
-    cpass.setBindGroup(0, moveBind);
+    cpass.setPipeline(computePipeline);
+    cpass.setBindGroup(0, computeBind);
     cpass.dispatchWorkgroups(workgroups);
     cpass.end();
 
@@ -167,10 +196,10 @@ export async function runGpuBenchmark(canvas: HTMLCanvasElement, n: number): Pro
     frames++;
     const now = performance.now();
     if (now - lastFpsT >= 500) {
-      fps = (frames * 1000) / (now - lastFpsT);
+      const fps = (frames * 1000) / (now - lastFpsT);
       frames = 0;
       lastFpsT = now;
-      hud.textContent = `PELAGIA · GPU spike (1.0)\ncreatures ${n.toLocaleString()}\nFPS ${fps.toFixed(0)}`;
+      hud.textContent = `PELAGIA · GPU spike (${mode})\ncreatures ${n.toLocaleString()}\nFPS ${fps.toFixed(0)}`;
     }
     requestAnimationFrame(tick);
   }

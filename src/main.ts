@@ -16,15 +16,16 @@ if (!canvas) throw new Error('Canvas #ocean not found');
 
 if (params.get('engine') === 'gpu') {
   const n = Math.max(1, Number(params.get('n') ?? 100000));
-  void runGpu(canvas, n);
+  const mode = params.get('mode') === 'brain' ? 'brain' : 'move';
+  void runGpu(canvas, n, mode);
 } else {
   runCpuView(canvas);
 }
 
-async function runGpu(canvas: HTMLCanvasElement, n: number): Promise<void> {
+async function runGpu(canvas: HTMLCanvasElement, n: number, mode: 'move' | 'brain'): Promise<void> {
   try {
     const { runGpuBenchmark } = await import('./gpu/benchmark.js');
-    await runGpuBenchmark(canvas, n);
+    await runGpuBenchmark(canvas, n, mode);
   } catch (err) {
     const msg = document.createElement('div');
     msg.style.cssText =
