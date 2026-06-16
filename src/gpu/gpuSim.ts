@@ -3,7 +3,10 @@ import common from './shaders/life_common.wgsl?raw';
 import gridPasses from './shaders/life_grid.wgsl?raw';
 import simPass from './shaders/life_sim.wgsl?raw';
 import cyclePasses from './shaders/life_cycle.wgsl?raw';
-import renderShader from './shaders/render_life.wgsl?raw';
+import creatureShader from './shaders/render_quad.wgsl?raw';
+import foodShader from './shaders/render_food.wgsl?raw';
+import fadeShader from './shaders/fade.wgsl?raw';
+import presentShader from './shaders/present.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
 import { GENOME_SIZE } from '../sim/brain.js';
 import { SpatialGrid } from '../sim/grid.js';
@@ -213,50 +216,102 @@ export async function runGpuSim(canvas: HTMLCanvasElement, requestedN: number): 
     pass.end();
   }
 
-  // --- Render ---
+  // --- Render: HDR accumulation texture -> trails + glow -> tonemapped present ---
   const renderUbo = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | CD });
   const renderData = new Float32Array(8);
-  const renderModule = device.createShaderModule({ code: renderShader });
-  const renderPipeline = device.createRenderPipeline({
-    layout: 'auto',
-    vertex: { module: renderModule, entryPoint: 'vs' },
-    fragment: {
-      module: renderModule,
-      entryPoint: 'fs',
-      targets: [
-        {
-          format,
-          blend: {
-            color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
-          },
-        },
-      ],
-    },
-    primitive: { topology: 'triangle-list' },
-  });
-  const renderBind = device.createBindGroup({
-    layout: renderPipeline.getBindGroupLayout(0),
+  const ACCUM_FORMAT: GPUTextureFormat = 'rgba16float';
+  const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+
+  const additive: GPUBlendState = {
+    color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+  };
+  const overBlend: GPUBlendState = {
+    color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+    alpha: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+  };
+  const mkRender = (
+    code: string,
+    blend: GPUBlendState | undefined,
+    target: GPUTextureFormat,
+  ): GPURenderPipeline => {
+    const mod = device.createShaderModule({ code });
+    const colorTarget: GPUColorTargetState = blend ? { format: target, blend } : { format: target };
+    return device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module: mod, entryPoint: 'vs' },
+      fragment: { module: mod, entryPoint: 'fs', targets: [colorTarget] },
+      primitive: { topology: 'triangle-list' },
+    });
+  };
+  const creaturePipeline = mkRender(creatureShader, additive, ACCUM_FORMAT);
+  const foodPipeline = mkRender(foodShader, additive, ACCUM_FORMAT);
+  const fadePipeline = mkRender(fadeShader, overBlend, ACCUM_FORMAT);
+  const presentPipeline = mkRender(presentShader, undefined, format);
+
+  const creatureBind = device.createBindGroup({
+    layout: creaturePipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: { buffer: renderUbo } },
       { binding: 1, resource: { buffer: stateBuf } },
       { binding: 2, resource: { buffer: bioBuf } },
     ],
   });
+  const foodBind = device.createBindGroup({
+    layout: foodPipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: renderUbo } },
+      { binding: 1, resource: { buffer: foodBuf } },
+    ],
+  });
 
+  let accumTex: GPUTexture | undefined;
+  let accumView!: GPUTextureView;
+  let presentBind!: GPUBindGroup;
   function resize(): void {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const cw = Math.floor(window.innerWidth * dpr);
     const ch = Math.floor(window.innerHeight * dpr);
     canvas.width = cw;
     canvas.height = ch;
+
+    accumTex?.destroy();
+    accumTex = device.createTexture({
+      size: [cw, ch],
+      format: ACCUM_FORMAT,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    accumView = accumTex.createView();
+    presentBind = device.createBindGroup({
+      layout: presentPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: sampler },
+        { binding: 1, resource: accumView },
+      ],
+    });
+    // Clear the fresh accumulation texture once.
+    const enc = device.createCommandEncoder();
+    enc
+      .beginRenderPass({
+        colorAttachments: [
+          {
+            view: accumView,
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          },
+        ],
+      })
+      .end();
+    device.queue.submit([enc.finish()]);
+
     const s = Math.min(cw / world, ch / world);
     renderData[0] = (s / cw) * 2;
     renderData[1] = -(s / ch) * 2;
     renderData[2] = ((cw - world * s) / 2 / cw) * 2 - 1;
     renderData[3] = 1 - ((ch - world * s) / 2 / ch) * 2;
-    renderData[4] = Math.max(4, world / 250);
-    renderData[5] = 0.95;
+    renderData[4] = Math.max(cellSize * 0.22, world / 220); // glow radius (world units)
+    renderData[5] = 1.4; // brightness (HDR; tonemapped on present)
     device.queue.writeBuffer(renderUbo, 0, renderData);
   }
   resize();
@@ -386,21 +441,32 @@ export async function runGpuSim(canvas: HTMLCanvasElement, requestedN: number): 
     writeParams(frame);
     const encoder = device.createCommandEncoder();
     recordSim(encoder);
+
+    // Accumulation pass: fade previous frame (trails) -> food -> creatures.
+    const accumPass = encoder.beginRenderPass({
+      colorAttachments: [{ view: accumView, loadOp: 'load', storeOp: 'store' }],
+    });
+    accumPass.setPipeline(fadePipeline);
+    accumPass.draw(3);
+    accumPass.setPipeline(foodPipeline);
+    accumPass.setBindGroup(0, foodBind);
+    accumPass.draw(6, f);
+    accumPass.setPipeline(creaturePipeline);
+    accumPass.setBindGroup(0, creatureBind);
+    accumPass.draw(6, n);
+    accumPass.end();
+
+    // Present pass: tonemap the accumulation texture to the swapchain.
     const view = context!.getCurrentTexture().createView();
-    const rpass = encoder.beginRenderPass({
+    const present = encoder.beginRenderPass({
       colorAttachments: [
-        {
-          view,
-          clearValue: { r: 0.008, g: 0.016, b: 0.04, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
+        { view, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' },
       ],
     });
-    rpass.setPipeline(renderPipeline);
-    rpass.setBindGroup(0, renderBind);
-    rpass.draw(3, n);
-    rpass.end();
+    present.setPipeline(presentPipeline);
+    present.setBindGroup(0, presentBind);
+    present.draw(3);
+    present.end();
     device.queue.submit([encoder.finish()]);
 
     frame++;
@@ -411,7 +477,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, requestedN: number): 
       frames = 0;
       lastFpsT = now;
       pollAlive();
-      hud.textContent = `PELAGIA · GPU ocean (2.0)\nslots ${n.toLocaleString()} · alive ${alive.toLocaleString()}\nfood ${f.toLocaleString()} · tick ${frame}\nFPS ${fps.toFixed(0)}`;
+      hud.textContent = `PELAGIA · GPU ocean (2.1)\nslots ${n.toLocaleString()} · alive ${alive.toLocaleString()}\nfood ${f.toLocaleString()} · tick ${frame}\nFPS ${fps.toFixed(0)}`;
     }
     requestAnimationFrame(tick);
   }
