@@ -37,6 +37,24 @@ export class FoodField {
     this.count--;
   }
 
+  /**
+   * Remove every pellet flagged in `eaten` (length >= count) in one forward
+   * pass, keeping the survivors packed and order-stable. Deterministic.
+   */
+  compact(eaten: Uint8Array): void {
+    let w = 0;
+    for (let r = 0; r < this.count; r++) {
+      if (!eaten[r]) {
+        if (w !== r) {
+          this.x[w] = this.x[r]!;
+          this.y[w] = this.y[r]!;
+        }
+        w++;
+      }
+    }
+    this.count = w;
+  }
+
   clear(): void {
     this.count = 0;
   }

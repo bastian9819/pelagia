@@ -17,8 +17,10 @@ describe('World food economy', () => {
     expect(w.food.count).toBe(500);
   });
 
-  it('spawns food over time without exceeding capacity', () => {
-    const w = new World(makeConfig({ foodInitial: 0, foodCapacity: 50, foodSpawnPerTick: 10 }));
+  it('spawns food over time without exceeding capacity (no creatures eating)', () => {
+    const w = new World(
+      makeConfig({ initialPopulation: 0, foodInitial: 0, foodCapacity: 50, foodSpawnPerTick: 10 }),
+    );
     expect(w.food.count).toBe(0);
     for (let i = 0; i < 100; i++) w.step();
     expect(w.food.count).toBe(50);
