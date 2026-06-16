@@ -3,54 +3,97 @@ import { World } from './sim/world.js';
 import { DEFAULT_CONFIG } from './core/config.js';
 
 /**
- * Entry point. Two engines, chosen by URL param:
- *   - default (CPU): the validated Phase 0 reference simulation, drawn with
- *     Canvas2D. URL params: ?seed=1&warmup=3000&speed=4
- *   - GPU spike:     ?engine=gpu&n=100000  — the Phase 1 WebGPU benchmark.
+ * Entry point.
+ *
+ * Default (no params): the production WebGPU ocean — thousands of neural
+ * creatures evolving, beautifully rendered. Falls back to a small CPU ocean if
+ * WebGPU is unavailable.
+ *
+ * Dev/diagnostic routes via URL params:
+ *   ?engine=cpu                         the Phase 0 CPU reference view
+ *   ?engine=gpu&mode=move|brain|grid    Phase 1 performance benchmarks
+ *   ?n=20000&warmup=500                 tune the ocean
  */
 
 const params = new URLSearchParams(location.search);
+const canvasEl = document.querySelector<HTMLCanvasElement>('#ocean');
+if (!canvasEl) throw new Error('Canvas #ocean not found');
+const canvas: HTMLCanvasElement = canvasEl;
 
-const canvas = document.querySelector<HTMLCanvasElement>('#ocean');
-if (!canvas) throw new Error('Canvas #ocean not found');
+const engine = params.get('engine');
+const mode = params.get('mode');
 
-if (params.get('engine') === 'gpu') {
-  const n = Math.max(1, Number(params.get('n') ?? 100000));
-  const m = params.get('mode');
-  const mode = m === 'brain' || m === 'grid' || m === 'life' ? m : 'move';
-  void runGpu(canvas, n, mode);
-} else {
+if (engine === 'cpu') {
   runCpuView(canvas);
+} else if (engine === 'gpu' && (mode === 'move' || mode === 'brain' || mode === 'grid')) {
+  void runBenchmark(canvas, mode);
+} else {
+  void bootOcean(canvas);
 }
 
-async function runGpu(
-  canvas: HTMLCanvasElement,
-  n: number,
-  mode: 'move' | 'brain' | 'grid' | 'life',
-): Promise<void> {
+// --- The production ocean, with loading + WebGPU detection + CPU fallback ---
+async function bootOcean(target: HTMLCanvasElement): Promise<void> {
+  if (!('gpu' in navigator)) {
+    fallbackToCpu('Tu navegador no soporta WebGPU.');
+    return;
+  }
+  const n = Math.max(1, Number(params.get('n') ?? 20000));
+  const warmup = Math.max(0, Number(params.get('warmup') ?? 500));
+  const loading = showLoading();
   try {
-    if (mode === 'life') {
-      const { runGpuSim } = await import('./gpu/gpuSim.js');
-      await runGpuSim(canvas, n);
-    } else if (mode === 'grid') {
-      const { runGpuGrid } = await import('./gpu/gridBench.js');
-      await runGpuGrid(canvas, n);
-    } else {
-      const { runGpuBenchmark } = await import('./gpu/benchmark.js');
-      await runGpuBenchmark(canvas, n, mode);
-    }
+    const { runGpuSim } = await import('./gpu/gpuSim.js');
+    await runGpuSim(target, { n, warmup, onReady: () => loading.dismiss() });
   } catch (err) {
-    const msg = document.createElement('div');
-    msg.style.cssText =
-      'position:fixed;inset:0;display:grid;place-items:center;padding:2rem;text-align:center;' +
-      'font:14px ui-monospace,monospace;color:#cfe8ff';
-    msg.textContent = `WebGPU benchmark failed: ${String(err)}`;
-    document.body.appendChild(msg);
-    throw err;
+    console.error(err);
+    loading.remove();
+    fallbackToCpu('No se pudo iniciar WebGPU en este equipo.');
   }
 }
 
-function runCpuView(canvas: HTMLCanvasElement): void {
+function fallbackToCpu(reason: string): void {
+  const b = document.createElement('div');
+  b.className = 'banner';
+  b.innerHTML = `${reason} Mostrando una versión reducida en CPU. Para la experiencia completa, usa un navegador con <a href="https://caniuse.com/webgpu" target="_blank" rel="noopener">WebGPU</a> (Chrome, Edge, Safari 26+).`;
+  document.body.appendChild(b);
+  runCpuView(canvas);
+}
+
+function showLoading(): { dismiss: () => void; remove: () => void } {
+  const el = document.createElement('div');
+  el.className = 'loading';
+  el.innerHTML =
+    '<div><div class="loading-title">PELAGIA</div>' +
+    '<div class="loading-sub">invocando el océano…</div></div>';
+  document.body.appendChild(el);
+  return {
+    dismiss: () => {
+      el.classList.add('hide');
+      setTimeout(() => el.remove(), 700);
+    },
+    remove: () => el.remove(),
+  };
+}
+
+async function runBenchmark(
+  target: HTMLCanvasElement,
+  benchMode: 'move' | 'brain' | 'grid',
+): Promise<void> {
+  const n = Math.max(1, Number(params.get('n') ?? 100000));
+  try {
+    if (benchMode === 'grid') {
+      const { runGpuGrid } = await import('./gpu/gridBench.js');
+      await runGpuGrid(target, n);
+    } else {
+      const { runGpuBenchmark } = await import('./gpu/benchmark.js');
+      await runGpuBenchmark(target, n, benchMode);
+    }
+  } catch (err) {
+    fallbackToCpu(`El benchmark GPU falló: ${String(err)}.`);
+  }
+}
+
+// --- CPU reference view (Phase 0): Canvas2D, works anywhere ---
+function runCpuView(target: HTMLCanvasElement): void {
   const seed = Number(params.get('seed') ?? DEFAULT_CONFIG.seed);
   const warmup = Number(params.get('warmup') ?? 0);
   const ticksPerFrame = Math.max(1, Number(params.get('speed') ?? 2));
@@ -59,7 +102,7 @@ function runCpuView(canvas: HTMLCanvasElement): void {
   for (let i = 0; i < warmup; i++) world.step();
   (globalThis as unknown as { __pelagia: unknown }).__pelagia = { world };
 
-  const ctx = canvas.getContext('2d');
+  const ctx = target.getContext('2d');
   if (!ctx) throw new Error('2D context unavailable');
 
   let viewW = 0;
@@ -68,8 +111,8 @@ function runCpuView(canvas: HTMLCanvasElement): void {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    canvas.width = Math.floor(viewW * dpr);
-    canvas.height = Math.floor(viewH * dpr);
+    target.width = Math.floor(viewW * dpr);
+    target.height = Math.floor(viewH * dpr);
     ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx!.fillStyle = '#02040a';
     ctx!.fillRect(0, 0, viewW, viewH);
@@ -128,7 +171,7 @@ function runCpuView(canvas: HTMLCanvasElement): void {
     }
     const meanGen = pop.count ? (sumGen / pop.count).toFixed(1) : '0';
     const lines = [
-      `PELAGIA · seed ${world.config.seed}`,
+      `PELAGIA · CPU · seed ${world.config.seed}`,
       `tick ${world.tick}`,
       `pop ${pop.count}`,
       `food ${world.food.count}`,
@@ -137,7 +180,7 @@ function runCpuView(canvas: HTMLCanvasElement): void {
     ctx!.font = '13px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx!.textBaseline = 'top';
     ctx!.fillStyle = 'rgba(2, 4, 10, 0.45)';
-    ctx!.fillRect(8, 8, 210, lines.length * 18 + 10);
+    ctx!.fillRect(8, 8, 230, lines.length * 18 + 10);
     ctx!.fillStyle = 'rgba(207, 232, 255, 0.9)';
     lines.forEach((l, i) => ctx!.fillText(l, 16, 16 + i * 18));
   }

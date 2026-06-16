@@ -35,3 +35,59 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+/* Loading screen shown while the GPU ocean initialises. */
+.loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at center, #0b1f3a 0%, #061229 55%, #02040a 100%);
+  z-index: 10;
+  transition: opacity 0.6s ease;
+}
+.loading.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+.loading-title {
+  font-size: clamp(2rem, 9vw, 6rem);
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--glow-cyan);
+  text-shadow: 0 0 30px rgba(63, 240, 216, 0.55);
+}
+.loading-sub {
+  margin-top: 0.6rem;
+  font-size: clamp(0.7rem, 2.2vw, 1rem);
+  color: rgba(207, 232, 255, 0.6);
+  text-align: center;
+  animation: pelagia-pulse 1.8s ease-in-out infinite;
+}
+@keyframes pelagia-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* Compatibility-mode banner (shown when WebGPU is unavailable). */
+.banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink);
+  background: rgba(11, 31, 58, 0.92);
+  border-bottom: 1px solid rgba(63, 240, 216, 0.25);
+  z-index: 9;
+}
+.banner a {
+  color: var(--glow-cyan);
+}

@@ -21,7 +21,17 @@ import { wrapDelta } from '../core/space.js';
  * Exposes window.__pelagia.readChemotaxis() so emergence can be validated on the
  * GPU the same way as the CPU oracle (mean cos(heading -> nearest food)).
  */
-export async function runGpuSim(canvas: HTMLCanvasElement, requestedN: number): Promise<void> {
+export interface OceanOptions {
+  /** Requested creature slot count (capped by GPU memory). */
+  n: number;
+  /** Sim ticks to run headless before the first rendered frame. */
+  warmup?: number;
+  /** Called once the ocean is set up and warmed (to dismiss a loading screen). */
+  onReady?: () => void;
+}
+
+export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): Promise<void> {
+  const requestedN = opts.n;
   const { device, format } = await initGpu();
   device.addEventListener('uncapturederror', (e) => {
     // Surface async WebGPU validation errors (otherwise the whole command
@@ -437,6 +447,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, requestedN: number): 
   let frames = 0;
   let lastFpsT = performance.now();
 
+  // Headless warm-up: advance the simulation before the first rendered frame so
+  // the ocean lands in a chosen state (past the initial die-off, mid-evolution).
+  const warmup = opts.warmup ?? 0;
+  for (let w = 0; w < warmup; w++) {
+    writeParams(frame);
+    const enc = device.createCommandEncoder();
+    recordSim(enc);
+    device.queue.submit([enc.finish()]);
+    frame++;
+  }
+  opts.onReady?.();
+
   function tick(): void {
     writeParams(frame);
     const encoder = device.createCommandEncoder();
@@ -477,7 +499,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, requestedN: number): 
       frames = 0;
       lastFpsT = now;
       pollAlive();
-      hud.textContent = `PELAGIA · GPU ocean (2.1)\nslots ${n.toLocaleString()} · alive ${alive.toLocaleString()}\nfood ${f.toLocaleString()} · tick ${frame}\nFPS ${fps.toFixed(0)}`;
+      hud.textContent = `PELAGIA\n${alive.toLocaleString()} creatures alive\ntick ${frame.toLocaleString()} · ${fps.toFixed(0)} fps`;
     }
     requestAnimationFrame(tick);
   }
