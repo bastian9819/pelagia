@@ -144,7 +144,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (ddx * ddx + ddy * ddy <= eatR * eatR) {
       let prev = atomicExchange(&gridData[claimIdx(bestIdx)], 1u);
       if (prev == 0u) {
-        energy = energy + P.p1.w; // foodEnergy
+        // Big food (low indices) is worth ext.w times a plankton pellet.
+        let big = bestIdx < (P.d1.x / 16u);
+        energy = energy + P.p1.w * select(1.0, P.ext.w, big);
         foodPos[bestIdx] = vec2<f32>(-1.0, -1.0); // mark eaten (rate-limited respawn)
       }
     }

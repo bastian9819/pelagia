@@ -89,15 +89,22 @@ fn foodRespawn(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (r.exchanged) { break; }
   }
   let frame = P.d1.y;
-  // Patchy food: each pellet belongs to one of a few slowly-drifting blooms, so
-  // food clusters into moving hotspots instead of a uniform sprinkle -> spatial
-  // foraging, migration. patch (P.ext.z) interpolates uniform (0) -> tight (1).
-  let K = 5u;
+  // Two food types by index. Big food (rare, low indices) respawns in a FEW tight
+  // drifting blooms -> rich hotspots worth competing over. Plankton (the rest)
+  // clusters per the patchiness slider (P.ext.z): uniform (0) -> tight (1).
+  let big = j < (P.d1.x / 16u);
+  var K = 5u;
+  var spread = mix(P.p0.x * 0.5, P.p0.x * 0.04, clamp(P.ext.z, 0.0, 1.0));
+  var drift = 0.0008;
+  if (big) {
+    K = 3u;
+    spread = P.p0.x * 0.05; // big-food blooms are always tight
+    drift = 0.0006;
+  }
   let bk = pcg(j) % K;
-  let ang = f32(bk) * 1.2566371 + f32(frame) * 0.0008;
+  let ang = f32(bk) * 2.3999632 + f32(frame) * drift;
   let cx = P.p0.x * (0.5 + 0.32 * cos(ang));
   let cy = P.p0.y * (0.5 + 0.32 * sin(ang * 1.3 + f32(bk)));
-  let spread = mix(P.p0.x * 0.5, P.p0.x * 0.04, clamp(P.ext.z, 0.0, 1.0));
   let fx = cx + (rnd(j + 17u, frame) - 0.5) * 2.0 * spread;
   let fy = cy + (rnd(j + 83u, frame) - 0.5) * 2.0 * spread;
   foodPos[j] = vec2<f32>(wrapf(fx, P.p0.x), wrapf(fy, P.p0.y));

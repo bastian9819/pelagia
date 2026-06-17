@@ -210,6 +210,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pf[25] = 1.25;
   // Food patchiness (ext.z): 0 = uniform sprinkle, 1 = tight drifting blooms.
   pf[26] = 0.6;
+  // Big-food value (ext.w): energy multiplier of a rare big-food pellet vs plankton.
+  pf[27] = 5;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -348,6 +350,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // --- Render: HDR accumulation texture -> trails + glow -> tonemapped present ---
   const renderUbo = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | CD });
   const renderData = new Float32Array(8);
+  renderData[7] = Math.floor(f / 16); // big-food slot count for the food renderer
   const ACCUM_FORMAT: GPUTextureFormat = 'rgba16float';
   const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
 
@@ -676,6 +679,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
     { labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
     { labelKey: 'g_patchiness', idx: 26, min: 0, max: 1, step: 0.05 },
+    { labelKey: 'g_bigFood', idx: 27, min: 1, max: 12, step: 0.5 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the

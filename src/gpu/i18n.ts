@@ -109,6 +109,7 @@ const S: Dict = {
   g_offspring: { en: 'offspring energy', es: 'energía de la cría' },
   g_moveCost: { en: 'move cost', es: 'coste de moverse' },
   g_patchiness: { en: 'food patchiness', es: 'agrupación de comida' },
+  g_bigFood: { en: 'big-food value', es: 'valor comida grande' },
   obs_predation: { en: 'predation', es: 'depredación' },
   tr_aggr: { en: 'aggression', es: 'agresión' },
   loading: { en: 'summoning the ocean…', es: 'invocando el océano…' },
