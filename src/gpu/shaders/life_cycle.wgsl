@@ -44,7 +44,8 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
   b.x = b.x - half;
   bio[i] = b;
 
-  bio[slot] = vec4<f32>(half, wrapHue(b.y + gaussian(i, frame) * 0.015), 1.0, 0.0);
+  // Inherit hue + lineage id unchanged (bio.w = stable lineage; bio.y = its colour).
+  bio[slot] = vec4<f32>(half, b.y, 1.0, b.w);
 
   let s = state[i];
   let jx = (rnd(i + 11u, frame) - 0.5) * 4.0;

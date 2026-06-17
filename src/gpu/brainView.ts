@@ -133,7 +133,7 @@ export function buildBrainView(onClose: () => void): BrainView {
       const speed = d[23]!;
       const energy = d[24]!;
       const hue = d[25]!;
-      const age = d[26]!;
+      const lineage = Math.round(d[26]!);
       const alive = d[27]! >= 0.5;
       draw(inputs, hidden, outputs);
       const turn = outputs[0]!;
@@ -141,8 +141,8 @@ export function buildBrainView(onClose: () => void): BrainView {
       const hueCss = `hsl(${Math.round(hue * 360)}, 90%, 62%)`;
       stats.innerHTML =
         `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${hueCss};margin-right:6px"></span>` +
-        `lineage ${(hue * 360).toFixed(0)}°${alive ? '' : ' · <span style="color:#ff5aa6">deceased</span>'}</div>` +
-        `<div>energy ${energy.toFixed(1)} · age ${Math.round(age)} · speed ${speed.toFixed(1)}</div>` +
+        `lineage #${lineage}${alive ? '' : ' · <span style="color:#ff5aa6">deceased</span>'}</div>` +
+        `<div>energy ${energy.toFixed(1)} · speed ${speed.toFixed(1)}</div>` +
         `<div>decision: turn ${turn > 0.1 ? 'right ▶' : turn < -0.1 ? '◀ left' : '— straight'} · ` +
         `thrust ${(thrust * 100).toFixed(0)}%</div>`;
     },

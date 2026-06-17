@@ -118,6 +118,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Metabolise.
   energy = energy - (P.p2.x + P.p2.y * speed);
   b.x = energy;
-  b.w = b.w + 1.0; // age
+  // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
 }

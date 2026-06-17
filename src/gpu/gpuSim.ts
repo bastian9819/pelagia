@@ -9,10 +9,12 @@ import fadeShader from './shaders/fade.wgsl?raw';
 import presentShader from './shaders/present.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
 import { GENOME_SIZE } from '../sim/brain.js';
+import { pcgHash, floatFromU32 } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
 import { buildUi } from './ui.js';
 import { buildBrainView } from './brainView.js';
+import { buildLineagePanel, characterizeGenome, type LineageRow } from './lineages.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
 
 /**
@@ -68,9 +70,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     stateData[i * 4 + 1] = Math.random() * world;
     stateData[i * 4 + 2] = Math.random() * Math.PI * 2;
     bioData[i * 4 + 0] = cfg.initialEnergy;
-    bioData[i * 4 + 1] = Math.random(); // hue
+    bioData[i * 4 + 1] = floatFromU32(pcgHash(i)); // hue derived from lineage id
     bioData[i * 4 + 2] = 1; // alive
-    bioData[i * 4 + 3] = 0; // age
+    bioData[i * 4 + 3] = i; // lineage id (= founder slot; inherited unchanged)
   }
   for (let i = 0; i < weightsData.length; i++) {
     weightsData[i] = (Math.random() * 2 - 1) * cfg.weightInitStd;
@@ -91,7 +93,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const CS = GPUBufferUsage.COPY_SRC;
   const stateBuf = device.createBuffer({ size: stateData.byteLength, usage: S | CD | CS });
   const bioBuf = device.createBuffer({ size: bioData.byteLength, usage: S | CD | CS });
-  const weightsBuf = device.createBuffer({ size: weightsData.byteLength, usage: S | CD });
+  const weightsBuf = device.createBuffer({ size: weightsData.byteLength, usage: S | CD | CS });
   const foodBuf = device.createBuffer({ size: foodData.byteLength, usage: S | CD | CS });
   // Packed atomic buffer: [cell counts/cursor | freeCount | budget | claims].
   const gridDataBuf = device.createBuffer({ size: (numCells + 2 + f) * 4, usage: S | CS });
@@ -529,6 +531,78 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     if (e.code === 'Escape') deselect();
   });
 
+  // --- Lineage explorer ---
+  const lineagePanel = buildLineagePanel();
+  document.body.appendChild(lineagePanel.panel);
+  ui.controls.appendChild(lineagePanel.toggle);
+  let analysisPending = false;
+  let lastAnalysisT = 0;
+  const prevCounts = new Map<number, number>();
+
+  async function analyzeLineages(): Promise<void> {
+    if (analysisPending) return;
+    analysisPending = true;
+    try {
+      const bRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });
+      let enc = device.createCommandEncoder();
+      enc.copyBufferToBuffer(bioBuf, 0, bRead, 0, n * 16);
+      device.queue.submit([enc.finish()]);
+      await bRead.mapAsync(GPUMapMode.READ);
+      const bi = new Float32Array(bRead.getMappedRange().slice(0));
+      bRead.unmap();
+      bRead.destroy();
+
+      const counts = new Map<number, number>();
+      const repSlot = new Map<number, number>();
+      for (let i = 0; i < n; i++) {
+        if (bi[i * 4 + 2]! < 0.5) continue;
+        const lin = Math.round(bi[i * 4 + 3]!);
+        counts.set(lin, (counts.get(lin) ?? 0) + 1);
+        if (!repSlot.has(lin)) repSlot.set(lin, i);
+      }
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+      const rows: LineageRow[] = [];
+      if (top.length > 0) {
+        const gRead = device.createBuffer({
+          size: top.length * GENOME_SIZE * 4,
+          usage: GPUBufferUsage.MAP_READ | CD,
+        });
+        enc = device.createCommandEncoder();
+        top.forEach(([lin], k) => {
+          enc.copyBufferToBuffer(
+            weightsBuf,
+            repSlot.get(lin)! * GENOME_SIZE * 4,
+            gRead,
+            k * GENOME_SIZE * 4,
+            GENOME_SIZE * 4,
+          );
+        });
+        device.queue.submit([enc.finish()]);
+        await gRead.mapAsync(GPUMapMode.READ);
+        const gAll = new Float32Array(gRead.getMappedRange().slice(0));
+        gRead.unmap();
+        gRead.destroy();
+
+        top.forEach(([lin, count], k) => {
+          const genome = gAll.subarray(k * GENOME_SIZE, (k + 1) * GENOME_SIZE);
+          rows.push({
+            lineage: lin,
+            hue: floatFromU32(pcgHash(lin)),
+            count,
+            trend: count - (prevCounts.get(lin) ?? count),
+            desc: characterizeGenome(genome),
+          });
+        });
+        prevCounts.clear();
+        for (const [lin, count] of counts) prevCounts.set(lin, count);
+      }
+      lineagePanel.update(rows);
+    } finally {
+      analysisPending = false;
+    }
+  }
+
   // Occasional non-blocking readback of the alive count (= n - freeCount).
   let alive = n;
   let countersPending = false;
@@ -739,6 +813,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       lastFpsT = now;
       pollAlive();
       ui.update(alive, fps, frame);
+      if (now - lastAnalysisT > 1500) {
+        lastAnalysisT = now;
+        void analyzeLineages();
+      }
     }
     requestAnimationFrame(tick);
   }
