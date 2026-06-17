@@ -28,23 +28,45 @@ function probe(
   return { turn: out[0]!, thrust: (out[1]! + 1) / 2 };
 }
 
-/** Behavioural profile of a genome as a translation key + a fast/slow flag. */
-export function characterizeGenome(genome: Float32Array): { descKey: string; fast: boolean } {
+/** Continuous behavioural traits of a genome + a headline label. */
+export interface LineageTraits {
+  descKey: string;
+  fast: boolean;
+  /** Turn-toward-food strength: >0 steers into food, <0 away. */
+  seek: number;
+  /** Thrust when food is dead ahead (0..1). */
+  forage: number;
+  /** Baseline thrust with no food in sight (0..1). */
+  cruise: number;
+  /** Handedness: a persistent same-way turn (circling) when |·| is large. */
+  turnBias: number;
+}
+
+/**
+ * Characterise a genome by probing its policy with canonical stimuli. Returns
+ * continuous traits (so even near-converged lineages read differently) plus a
+ * headline label for a quick gist.
+ */
+export function characterizeGenome(genome: Float32Array): LineageTraits {
   const ahead = probe(genome, 1, 0, 0.8);
   const left = probe(genome, 0, 1, 0.8);
   const right = probe(genome, 0, -1, 0.8);
   const none = probe(genome, 0, 0, 0);
   const forage = ahead.thrust;
-  const steer = (left.turn - right.turn) / 2;
   const cruise = none.thrust;
+  const seek = (left.turn - right.turn) / 2; // >0 turns toward food
+  const turnBias = (left.turn + right.turn) / 2; // same-way bias -> circling
 
   let descKey: string;
-  if (steer > 0.25 && forage > 0.45) descKey = 'desc_chase';
-  else if (steer > 0.25) descKey = 'desc_steer';
+  if (Math.abs(turnBias) > 0.35 && seek < 0.2) descKey = 'desc_circler';
+  else if (seek > 0.25 && forage > 0.45) descKey = 'desc_chase';
+  else if (seek > 0.25) descKey = 'desc_steer';
+  else if (cruise < 0.3 && forage > 0.5) descKey = 'desc_ambush';
   else if (forage > 0.55 && cruise > 0.5) descKey = 'desc_straight';
-  else if (steer < -0.2) descKey = 'desc_away';
+  else if (seek < -0.2) descKey = 'desc_away';
   else descKey = 'desc_erratic';
-  return { descKey, fast: (forage + cruise) / 2 > 0.55 };
+
+  return { descKey, fast: (forage + cruise) / 2 > 0.55, seek, forage, cruise, turnBias };
 }
 
 export interface LineageRow {
@@ -52,8 +74,13 @@ export interface LineageRow {
   hue: number;
   count: number;
   trend: number;
+  /** Which section to file the row under in the panel. */
+  group: 'dominant' | 'distinct';
   descKey: string;
   fast: boolean;
+  seek: number;
+  forage: number;
+  cruise: number;
 }
 
 export interface LineagePanel {
@@ -82,27 +109,44 @@ export function buildLineagePanel(): LineagePanel {
   };
 
   let lastRows: LineageRow[] = [];
+  function rowHtml(r: LineageRow): string {
+    const c = `hsl(${Math.round(r.hue * 360)}, 90%, 62%)`;
+    const arrow = r.trend > 1 ? '▲' : r.trend < -1 ? '▼' : '—';
+    const ac = r.trend > 1 ? '#3ff0d8' : r.trend < -1 ? '#ff5aa6' : 'rgba(207,232,255,.5)';
+    const desc = `${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}`;
+    const traits =
+      `${t('tr_seek')} ${r.seek.toFixed(2)} · ` +
+      `${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
+      `${t('tr_cruise')} ${r.cruise.toFixed(2)}`;
+    return (
+      `<div style="margin-bottom:9px;line-height:1.45">` +
+      `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
+      `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span>` +
+      `<div style="opacity:.7;margin-left:16px">${desc}</div>` +
+      `<div style="opacity:.5;margin-left:16px;font-size:11px">${traits}</div></div>`
+    );
+  }
+  function sectionHtml(key: string, rows: LineageRow[]): string {
+    if (rows.length === 0) return '';
+    const head = `<div style="opacity:.55;letter-spacing:.08em;margin:2px 0 6px">${t(key)}</div>`;
+    return head + rows.map(rowHtml).join('');
+  }
   function render(): void {
-    title.textContent = t('dominantLineages');
+    title.textContent = t('lineages');
     toggle.textContent = '🧬 ' + t('lineages');
     if (lastRows.length === 0) {
       list.innerHTML = `<div style="opacity:.5">${t('sampling')}</div>`;
       return;
     }
-    list.innerHTML = lastRows
-      .map((r) => {
-        const c = `hsl(${Math.round(r.hue * 360)}, 90%, 62%)`;
-        const arrow = r.trend > 1 ? '▲' : r.trend < -1 ? '▼' : '—';
-        const ac = r.trend > 1 ? '#3ff0d8' : r.trend < -1 ? '#ff5aa6' : 'rgba(207,232,255,.5)';
-        const desc = `${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}`;
-        return (
-          `<div style="margin-bottom:9px;line-height:1.45">` +
-          `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
-          `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span>` +
-          `<div style="opacity:.7;margin-left:16px">${desc}</div></div>`
-        );
-      })
-      .join('');
+    list.innerHTML =
+      sectionHtml(
+        'dominant',
+        lastRows.filter((r) => r.group === 'dominant'),
+      ) +
+      sectionHtml(
+        'distinct',
+        lastRows.filter((r) => r.group === 'distinct'),
+      );
   }
   render();
   onLang(render);

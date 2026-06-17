@@ -14,7 +14,12 @@ import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
 import { buildUi, mkBtn } from './ui.js';
 import { buildBrainView } from './brainView.js';
-import { buildLineagePanel, characterizeGenome, type LineageRow } from './lineages.js';
+import {
+  buildLineagePanel,
+  characterizeGenome,
+  type LineageRow,
+  type LineageTraits,
+} from './lineages.js';
 import { buildGodPanel, type GodSpec } from './god.js';
 import { t, onLang } from './i18n.js';
 import { parseShareState, buildShareUrl, applyHash, copyToClipboard } from './share.js';
@@ -69,37 +74,42 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const numCells = cols * rows;
 
   // --- Initial data (seeded: same seed -> same starting ocean) ---
-  // Independent RNG streams so positions, genomes and food don't couple, and
-  // capping N (low-memory device) still gives the first n creatures the same
-  // draws as a higher-N run of the same seed (graceful degradation, R-002).
-  const rngState = new Rng(seed, 1);
-  const rngWeights = new Rng(seed, 2);
-  const rngFood = new Rng(seed, 3);
   const stateData = new Float32Array(n * 4);
   const bioData = new Float32Array(n * 4);
   const weightsData = new Float32Array(n * GENOME_SIZE);
   const foodData = new Float32Array(f * 2);
-  for (let i = 0; i < n; i++) {
-    stateData[i * 4 + 0] = rngState.nextFloat() * world;
-    stateData[i * 4 + 1] = rngState.nextFloat() * world;
-    stateData[i * 4 + 2] = rngState.nextFloat() * Math.PI * 2;
-    bioData[i * 4 + 0] = cfg.initialEnergy;
-    bioData[i * 4 + 1] = floatFromU32(pcgHash(i)); // hue derived from lineage id
-    bioData[i * 4 + 2] = 1; // alive
-    bioData[i * 4 + 3] = i; // lineage id (= founder slot; inherited unchanged)
-  }
-  for (let i = 0; i < weightsData.length; i++) {
-    weightsData[i] = (rngWeights.nextFloat() * 2 - 1) * cfg.weightInitStd;
-  }
-  for (let j = 0; j < f; j++) {
-    if (j < foodInitAlive) {
-      foodData[j * 2 + 0] = rngFood.nextFloat() * world;
-      foodData[j * 2 + 1] = rngFood.nextFloat() * world;
-    } else {
-      foodData[j * 2 + 0] = -1; // dead slot (sentinel)
-      foodData[j * 2 + 1] = -1;
+  // Independent RNG streams so positions, genomes and food don't couple, and
+  // capping N (low-memory device) still gives the first n creatures the same
+  // draws as a higher-N run of the same seed (graceful degradation, R-002).
+  // Re-runnable so "restart" can reseed the same ocean in place (no page reload).
+  function fillInitialData(): void {
+    const rngState = new Rng(seed, 1);
+    const rngWeights = new Rng(seed, 2);
+    const rngFood = new Rng(seed, 3);
+    for (let i = 0; i < n; i++) {
+      stateData[i * 4 + 0] = rngState.nextFloat() * world;
+      stateData[i * 4 + 1] = rngState.nextFloat() * world;
+      stateData[i * 4 + 2] = rngState.nextFloat() * Math.PI * 2;
+      stateData[i * 4 + 3] = 0; // speed (reset on restart)
+      bioData[i * 4 + 0] = cfg.initialEnergy;
+      bioData[i * 4 + 1] = floatFromU32(pcgHash(i)); // hue derived from lineage id
+      bioData[i * 4 + 2] = 1; // alive
+      bioData[i * 4 + 3] = i; // lineage id (= founder slot; inherited unchanged)
+    }
+    for (let i = 0; i < weightsData.length; i++) {
+      weightsData[i] = (rngWeights.nextFloat() * 2 - 1) * cfg.weightInitStd;
+    }
+    for (let j = 0; j < f; j++) {
+      if (j < foodInitAlive) {
+        foodData[j * 2 + 0] = rngFood.nextFloat() * world;
+        foodData[j * 2 + 1] = rngFood.nextFloat() * world;
+      } else {
+        foodData[j * 2 + 0] = -1; // dead slot (sentinel)
+        foodData[j * 2 + 1] = -1;
+      }
     }
   }
+  fillInitialData();
 
   // --- Buffers ---
   const S = GPUBufferUsage.STORAGE;
@@ -110,7 +120,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const weightsBuf = device.createBuffer({ size: weightsData.byteLength, usage: S | CD | CS });
   const foodBuf = device.createBuffer({ size: foodData.byteLength, usage: S | CD | CS });
   // Packed atomic buffer: [cell counts/cursor | freeCount | budget | claims].
-  const gridDataBuf = device.createBuffer({ size: (numCells + 2 + f) * 4, usage: S | CS });
+  // COPY_DST so restart can reset the persistent freeCount slot in place.
+  const gridDataBuf = device.createBuffer({ size: (numCells + 2 + f) * 4, usage: S | CS | CD });
   const cellStartBuf = device.createBuffer({ size: (numCells + 1) * 4, usage: S });
   const sortedBuf = device.createBuffer({ size: f * 4, usage: S });
   const freeListBuf = device.createBuffer({ size: n * 4, usage: S });
@@ -602,6 +613,15 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   onLang(relabelShare);
   ui.controls.appendChild(shareBtn);
 
+  // --- Restart: reseed the ocean in place (same seed + current params, no reload) ---
+  const resetBtn = mkBtn('', () => resetOcean());
+  function relabelReset(): void {
+    resetBtn.textContent = '↻ ' + t('restart');
+  }
+  relabelReset();
+  onLang(relabelReset);
+  ui.controls.appendChild(resetBtn);
+
   // --- Help / pedagogical panel ---
   const help = document.createElement('div');
   help.style.cssText =
@@ -672,16 +692,17 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         counts.set(lin, (counts.get(lin) ?? 0) + 1);
         if (!repSlot.has(lin)) repSlot.set(lin, i);
       }
-      const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+      const pool = ranked.slice(0, 16); // characterise a pool, then pick groups
 
       const rows: LineageRow[] = [];
-      if (top.length > 0) {
+      if (pool.length > 0) {
         const gRead = device.createBuffer({
-          size: top.length * GENOME_SIZE * 4,
+          size: pool.length * GENOME_SIZE * 4,
           usage: GPUBufferUsage.MAP_READ | CD,
         });
         enc = device.createCommandEncoder();
-        top.forEach(([lin], k) => {
+        pool.forEach(([lin], k) => {
           enc.copyBufferToBuffer(
             weightsBuf,
             repSlot.get(lin)! * GENOME_SIZE * 4,
@@ -696,17 +717,50 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         gRead.unmap();
         gRead.destroy();
 
-        top.forEach(([lin, count], k) => {
-          const ch = characterizeGenome(gAll.subarray(k * GENOME_SIZE, (k + 1) * GENOME_SIZE));
+        const traits = pool.map((_e, k) =>
+          characterizeGenome(gAll.subarray(k * GENOME_SIZE, (k + 1) * GENOME_SIZE)),
+        );
+        const dominantCount = Math.min(5, pool.length);
+        // Behavioural centroid of the dominant clades; the "distinct" section
+        // surfaces the non-dominant survivors whose policy differs MOST from it
+        // (real behavioural variety, not just the smallest clades — which, after
+        // convergence, tend to be ordinary too).
+        const axes = (tr: LineageTraits): number[] => [tr.seek, tr.forage, tr.cruise, tr.turnBias];
+        const centroid = [0, 0, 0, 0];
+        for (let k = 0; k < dominantCount; k++) {
+          const a = axes(traits[k]!);
+          for (let d = 0; d < 4; d++) centroid[d]! += a[d]! / dominantCount;
+        }
+        const dist = (a: number[]): number =>
+          Math.hypot(
+            a[0]! - centroid[0]!,
+            a[1]! - centroid[1]!,
+            a[2]! - centroid[2]!,
+            a[3]! - centroid[3]!,
+          );
+        const distinctIdx: number[] = [];
+        for (let k = dominantCount; k < pool.length; k++) distinctIdx.push(k);
+        distinctIdx.sort((a, b) => dist(axes(traits[b]!)) - dist(axes(traits[a]!)));
+
+        const pushRow = (k: number, group: 'dominant' | 'distinct'): void => {
+          const [lin, count] = pool[k]!;
+          const ch = traits[k]!;
           rows.push({
             lineage: lin,
             hue: floatFromU32(pcgHash(lin)),
             count,
             trend: count - (prevCounts.get(lin) ?? count),
+            group,
             descKey: ch.descKey,
             fast: ch.fast,
+            seek: ch.seek,
+            forage: ch.forage,
+            cruise: ch.cruise,
           });
-        });
+        };
+        for (let k = 0; k < dominantCount; k++) pushRow(k, 'dominant');
+        for (const k of distinctIdx.slice(0, 3)) pushRow(k, 'distinct');
+
         prevCounts.clear();
         for (const [lin, count] of counts) prevCounts.set(lin, count);
       }
@@ -812,7 +866,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         y: +st[1]!.toFixed(1),
         heading: +st[2]!.toFixed(2),
         energy: bi[0]!,
-        age: bi[3]!,
+        lineage: bi[3]!,
       },
       alive: aliveCount,
       aliveFood,
@@ -831,6 +885,39 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let frames = 0;
   let stepAcc = 0;
   let lastFpsT = performance.now();
+
+  // Restart the ocean in place: reseed the buffers from the current seed, empty
+  // the free-slot stack, rewind the frame counter (so the shader RNG replays),
+  // wipe trails and drop any selection. Same seed + current god params = a
+  // reproducible re-run; revives everyone after an extinction without a reload.
+  function resetOcean(): void {
+    fillInitialData();
+    device.queue.writeBuffer(stateBuf, 0, stateData);
+    device.queue.writeBuffer(bioBuf, 0, bioData);
+    device.queue.writeBuffer(weightsBuf, 0, weightsData);
+    device.queue.writeBuffer(foodBuf, 0, foodData);
+    device.queue.writeBuffer(gridDataBuf, numCells * 4, new Uint32Array([0])); // freeCount = 0
+    frame = 0;
+    stepAcc = 0;
+    alive = n;
+    prevCounts.clear();
+    lineagePanel.update([]);
+    deselect();
+    const enc = device.createCommandEncoder();
+    enc
+      .beginRenderPass({
+        colorAttachments: [
+          {
+            view: accumView,
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          },
+        ],
+      })
+      .end();
+    device.queue.submit([enc.finish()]);
+  }
 
   // Headless warm-up: advance the simulation before the first rendered frame so
   // the ocean lands in a chosen state (past the initial die-off, mid-evolution).
