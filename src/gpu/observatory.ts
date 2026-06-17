@@ -29,6 +29,8 @@ export interface WorldSample {
   predGain: number;
   /** Population-weighted mean body size (Phase 6 morphology). */
   meanSize: number;
+  /** Day/night light level 0..1 (noon=1, midnight=0); -1 when the cycle is off. */
+  daylight: number;
   /** descKey -> count, sampled from the dominant pool (a strategy snapshot). */
   strategy: Record<string, number>;
 }
@@ -255,8 +257,12 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       cur.predGain > 0
         ? `${t('nar_predActive')}${cur.predKills > 0 ? ` (${cur.predKills}/tick)` : ''}`
         : t('nar_predOff');
+    const phase =
+      cur.daylight < 0
+        ? ''
+        : ` ${cur.daylight > 0.6 ? '☀ ' + t('nar_day') : cur.daylight < 0.4 ? '🌙 ' + t('nar_night') : '🌅 ' + t('nar_dusk')}.`;
     return (
-      `${t('nar_pop')} ${cur.alive.toLocaleString()} · ${trend}. ${pred}. ` +
+      `${t('nar_pop')} ${cur.alive.toLocaleString()} · ${trend}.${phase} ${pred}. ` +
       `${t('nar_strategy')}: ${strat}. ${t('nar_complexity')} ${meanN} ${t('neurons')} · ` +
       `${t('nar_size')} ${cur.meanSize.toFixed(2)}×.`
     );

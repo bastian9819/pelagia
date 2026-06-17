@@ -8,7 +8,8 @@ struct Params {
   p3: vec4<f32>, // mutationRate, mutationStd, offspringFraction, _
   d0: vec4<u32>, // cols, rows, numCells, n
   d1: vec4<u32>, // f (food count), frame, selectedIndex, worldSeed
-  ext: vec4<f32>, // predationGain (0 disables), predationMargin, _, _  (Phase 6)
+  ext: vec4<f32>, // predationGain (0 disables), predationMargin, foodPatchiness, bigFoodMult
+  ext2: vec4<f32>, // dayNightStrength (0 disables), dayLength (ticks), _, _
 };
 
 // Group 0: creature + world state.

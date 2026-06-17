@@ -170,11 +170,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   device.queue.writeBuffer(weightsBuf, 0, weightsData);
   device.queue.writeBuffer(foodBuf, 0, foodData);
 
-  // --- Params uniform (112 bytes: 5 vec4<f32> + 2 vec4<u32>) ---
-  // Phase 6 appended a 5th f32 vec4 `ext` AFTER d0/d1, so existing indices are
-  // unchanged: d0 = pu[16..19], d1 = pu[20..23], ext = pf[24..27].
-  const paramsBuf = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | CD });
-  const pbuf = new ArrayBuffer(112);
+  // --- Params uniform (128 bytes: 6 vec4<f32> + 2 vec4<u32>) ---
+  // Appended additively so existing indices never move: d0 = pu[16..19],
+  // d1 = pu[20..23], ext = pf[24..27], ext2 = pf[28..31] (day/night).
+  const paramsBuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | CD });
+  const pbuf = new ArrayBuffer(128);
   const pf = new Float32Array(pbuf);
   const pu = new Uint32Array(pbuf);
   pf[0] = world;
@@ -212,6 +212,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pf[26] = 0.6;
   // Big-food value (ext.w): energy multiplier of a rare big-food pellet vs plankton.
   pf[27] = 5;
+  // Day/night cycle: ext2.x = strength (0 disables, food + light swing), ext2.y =
+  // period in ticks. On by default (moderate) so the boom/bust is visible.
+  pf[28] = 0.45;
+  pf[29] = 1600;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -680,6 +684,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
     { labelKey: 'g_patchiness', idx: 26, min: 0, max: 1, step: 0.05 },
     { labelKey: 'g_bigFood', idx: 27, min: 1, max: 12, step: 0.5 },
+    { labelKey: 'g_dayNight', idx: 28, min: 0, max: 0.85, step: 0.05 },
+    { labelKey: 'g_dayLength', idx: 29, min: 400, max: 4000, step: 100 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the
@@ -1098,6 +1104,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         predKills: lastPredKills,
         predGain: pf[24]!,
         meanSize,
+        daylight:
+          pf[28]! > 0 ? 0.5 + 0.5 * Math.sin((2 * Math.PI * frame) / Math.max(1, pf[29]!)) : -1,
         strategy,
       });
       if (worldSeries.length > MAX_WORLD_SAMPLES) worldSeries.shift();
@@ -1296,6 +1304,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       device.queue.submit([enc.finish()]);
       frame++;
     }
+
+    // Day/night: dim the scene on the same sine that swings the food influx, so
+    // the cycle is visible (the ocean brightens by day, darkens at night).
+    const dayPhase = Math.sin((2 * Math.PI * frame) / Math.max(1, pf[29]!));
+    renderData[5] = 1.4 * (1 + 0.3 * pf[28]! * dayPhase);
+    device.queue.writeBuffer(renderUbo, 0, renderData);
 
     // Render every frame (so trails keep fading even while paused).
     const encoder = device.createCommandEncoder();

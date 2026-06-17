@@ -65,7 +65,11 @@ fn scan() {
   }
   cellStart[base + nc] = cacc;
 
-  atomicStore(&gridData[budgetIdx()], u32(P.p3.w)); // food spawn budget
+  // Day/night cycle: food influx swings with a slow sine so the ocean has rich
+  // and lean times (boom/bust). ext2.x = strength (0 disables), ext2.y = period.
+  let phase = sin(6.2831853 * f32(P.d1.y) / max(1.0, P.ext2.y));
+  let dayFactor = max(0.1, 1.0 + P.ext2.x * phase);
+  atomicStore(&gridData[budgetIdx()], u32(P.p3.w * dayFactor)); // food spawn budget
   atomicStore(&gridData[predCountIdx()], 0u); // predation kills this tick
 }
 
