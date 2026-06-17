@@ -1,0 +1,433 @@
+/**
+ * The Observatory: a dedicated, full-screen "biologist" view over the living
+ * ocean. Three areas, all fed from the periodic GPU read-backs the sim already
+ * does (so it adds no per-frame cost):
+ *
+ *   1. The world — time series of population, food, lineage diversity and an
+ *      energy band, plus a sampled strategy mix.
+ *   2. Lineages over time — a table of clades with their rise-and-fall curves
+ *      and evolved traits.
+ *   3. Tracked creatures — a small watch-list (capped) of individuals you pin
+ *      from the brain panel, each with its energy/speed history.
+ *
+ * The ocean keeps running behind the dimmed overlay. Rendering happens only
+ * while the view is open; data keeps accumulating either way (in gpuSim).
+ */
+import { t, onLang } from './i18n.js';
+
+export interface WorldSample {
+  tick: number;
+  alive: number;
+  foodAlive: number;
+  lineages: number;
+  energyAvg: number;
+  energyMin: number;
+  energyMax: number;
+  /** descKey -> count, sampled from the dominant pool (a strategy snapshot). */
+  strategy: Record<string, number>;
+}
+
+export interface LineageHistory {
+  lineage: number;
+  hue: number;
+  count: number;
+  trend: number;
+  descKey: string;
+  fast: boolean;
+  seek: number;
+  forage: number;
+  cruise: number;
+  /** Population samples over time (oldest -> newest), for the rise/fall curve. */
+  samples: number[];
+}
+
+export interface WatchSample {
+  tick: number;
+  energy: number;
+  speed: number;
+  turn: number;
+  thrust: number;
+  alive: boolean;
+}
+
+export interface Watched {
+  id: number;
+  lineage: number;
+  hue: number;
+  history: WatchSample[];
+}
+
+export interface ObservatoryData {
+  world: WorldSample[];
+  lineages: LineageHistory[];
+  watched: Watched[];
+}
+
+export interface Observatory {
+  panel: HTMLElement;
+  toggle: HTMLButtonElement;
+  isOpen(): boolean;
+  update(data: ObservatoryData): void;
+}
+
+const STRAT_COLOR: Record<string, string> = {
+  desc_chase: '#3ff0d8',
+  desc_steer: '#5ad1ff',
+  desc_straight: '#9b8cff',
+  desc_ambush: '#ff9f43',
+  desc_circler: '#ffd23f',
+  desc_away: '#ff5aa6',
+  desc_erratic: '#8aa0b4',
+};
+
+const ACCENT = '#3ff0d8';
+const CARD =
+  'background:rgba(6,18,41,0.82);border:1px solid rgba(63,240,216,0.18);' +
+  'border-radius:12px;padding:14px 16px;';
+
+function setupCanvas(c: HTMLCanvasElement, wCss: number, hCss: number): CanvasRenderingContext2D {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  c.width = Math.round(wCss * dpr);
+  c.height = Math.round(hCss * dpr);
+  c.style.width = `${wCss}px`;
+  c.style.height = `${hCss}px`;
+  const ctx = c.getContext('2d')!;
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+/** Draw one or more line series sharing a y-scale. Returns the max used. */
+function lineChart(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  series: { values: number[]; color: string }[],
+): number {
+  ctx.clearRect(0, 0, w, h);
+  let max = 1;
+  for (const s of series) for (const v of s.values) if (v > max) max = v;
+  ctx.strokeStyle = 'rgba(120,160,200,0.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, h - 0.5);
+  ctx.lineTo(w, h - 0.5);
+  ctx.stroke();
+  for (const s of series) {
+    if (s.values.length < 2) continue;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    s.values.forEach((v, i) => {
+      const x = (i / (s.values.length - 1)) * w;
+      const y = h - (v / max) * (h - 4) - 2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  return max;
+}
+
+/** Energy band: filled min..max area with a mean line on top. */
+function bandChart(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  mins: number[],
+  means: number[],
+  maxs: number[],
+): void {
+  ctx.clearRect(0, 0, w, h);
+  const n = means.length;
+  if (n < 2) return;
+  let max = 1;
+  for (const v of maxs) if (v > max) max = v;
+  const xAt = (i: number): number => (i / (n - 1)) * w;
+  const yAt = (v: number): number => h - (v / max) * (h - 4) - 2;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) ctx.lineTo(xAt(i), yAt(maxs[i]!));
+  for (let i = n - 1; i >= 0; i--) ctx.lineTo(xAt(i), yAt(mins[i]!));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(63,240,216,0.14)';
+  ctx.fill();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  means.forEach((v, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(v)) : ctx.lineTo(xAt(i), yAt(v))));
+  ctx.stroke();
+}
+
+function mkCard(titleKey: string): { card: HTMLElement; title: HTMLElement; body: HTMLElement } {
+  const card = document.createElement('div');
+  card.style.cssText = CARD;
+  const title = document.createElement('div');
+  title.style.cssText = `font-weight:600;letter-spacing:.1em;color:${ACCENT};margin-bottom:10px;`;
+  title.dataset.key = titleKey;
+  const body = document.createElement('div');
+  card.append(title, body);
+  return { card, title, body };
+}
+
+export function buildObservatory(onRemoveWatch: (id: number) => void): Observatory {
+  let open = false;
+  let last: ObservatoryData = { world: [], lineages: [], watched: [] };
+
+  const panel = document.createElement('div');
+  panel.style.cssText =
+    'position:fixed;inset:0;display:none;z-index:30;overflow:auto;' +
+    'background:rgba(2,4,10,0.9);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;';
+
+  const inner = document.createElement('div');
+  inner.style.cssText = 'max-width:1100px;margin:0 auto;padding:22px 22px 60px;';
+  panel.append(inner);
+
+  const header = document.createElement('div');
+  header.style.cssText =
+    'display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;';
+  const h1 = document.createElement('div');
+  h1.style.cssText = `font-size:20px;font-weight:600;letter-spacing:.12em;color:${ACCENT};`;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText =
+    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  closeBtn.onclick = () => setOpen(false);
+  header.append(h1, closeBtn);
+  inner.append(header);
+
+  const worldCard = mkCard('obs_world');
+  const lineageCard = mkCard('obs_lineages');
+  const watchCard = mkCard('obs_watched');
+  inner.append(worldCard.card, lineageCard.card, watchCard.card);
+  lineageCard.card.style.marginTop = '16px';
+  watchCard.card.style.marginTop = '16px';
+
+  const toggle = document.createElement('button');
+  toggle.style.cssText =
+    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  toggle.onclick = () => setOpen(!open);
+
+  function setOpen(v: boolean): void {
+    open = v;
+    panel.style.display = v ? 'block' : 'none';
+    if (v) render();
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && open) setOpen(false);
+  });
+
+  // --- Renderers (only run while open) ---
+  function tile(label: string, value: string, color = '#cfe8ff'): string {
+    return (
+      `<div style="${CARD}padding:10px 12px;min-width:120px">` +
+      `<div style="opacity:.55;font-size:11px">${label}</div>` +
+      `<div style="font-size:22px;color:${color};margin-top:2px">${value}</div></div>`
+    );
+  }
+
+  function renderWorld(world: WorldSample[]): void {
+    const body = worldCard.body;
+    body.innerHTML = '';
+    if (world.length === 0) {
+      body.innerHTML = `<div style="opacity:.5">${t('sampling')}</div>`;
+      return;
+    }
+    const cur = world[world.length - 1]!;
+    const tiles = document.createElement('div');
+    tiles.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;';
+    tiles.innerHTML =
+      tile(t('obs_alive'), cur.alive.toLocaleString(), ACCENT) +
+      tile(t('obs_food'), cur.foodAlive.toLocaleString()) +
+      tile(t('obs_diversity'), cur.lineages.toLocaleString()) +
+      tile(t('obs_meanEnergy'), cur.energyAvg.toFixed(1));
+    body.append(tiles);
+
+    const charts = document.createElement('div');
+    charts.style.cssText = 'display:flex;gap:18px;flex-wrap:wrap;';
+    const popWrap = document.createElement('div');
+    popWrap.innerHTML =
+      `<div style="opacity:.6;font-size:11px;margin-bottom:4px">${t('obs_population')} ` +
+      `<span style="color:${ACCENT}">▬</span> · ${t('obs_food')} <span style="color:#5ad1ff">▬</span></div>`;
+    const popCanvas = document.createElement('canvas');
+    popWrap.append(popCanvas);
+    const enWrap = document.createElement('div');
+    enWrap.innerHTML = `<div style="opacity:.6;font-size:11px;margin-bottom:4px">${t('obs_energyBand')}</div>`;
+    const enCanvas = document.createElement('canvas');
+    enWrap.append(enCanvas);
+    charts.append(popWrap, enWrap);
+    body.append(charts);
+
+    const cw = 420;
+    const ch = 120;
+    lineChart(setupCanvas(popCanvas, cw, ch), cw, ch, [
+      { values: world.map((s) => s.alive), color: ACCENT },
+      { values: world.map((s) => s.foodAlive), color: '#5ad1ff' },
+    ]);
+    bandChart(
+      setupCanvas(enCanvas, cw, ch),
+      cw,
+      ch,
+      world.map((s) => s.energyMin),
+      world.map((s) => s.energyAvg),
+      world.map((s) => s.energyMax),
+    );
+
+    // Strategy mix (stacked bar + legend), from the latest sample.
+    const total = Object.values(cur.strategy).reduce((a, b) => a + b, 0);
+    if (total > 0) {
+      const mix = document.createElement('div');
+      mix.style.cssText = 'margin-top:14px';
+      const entries = Object.entries(cur.strategy).sort((a, b) => b[1] - a[1]);
+      const bar = entries
+        .map(([k, v]) => {
+          const pct = (v / total) * 100;
+          const c = STRAT_COLOR[k] ?? '#8aa0b4';
+          return `<div title="${t(k)}" style="width:${pct}%;background:${c}"></div>`;
+        })
+        .join('');
+      const legend = entries
+        .map(([k, v]) => {
+          const c = STRAT_COLOR[k] ?? '#8aa0b4';
+          return (
+            `<span style="margin-right:12px;white-space:nowrap">` +
+            `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};margin-right:5px"></span>` +
+            `${t(k)} ${Math.round((v / total) * 100)}%</span>`
+          );
+        })
+        .join('');
+      mix.innerHTML =
+        `<div style="opacity:.6;font-size:11px;margin-bottom:5px">${t('obs_strategy')}</div>` +
+        `<div style="display:flex;height:14px;border-radius:4px;overflow:hidden">${bar}</div>` +
+        `<div style="margin-top:7px;font-size:11px;opacity:.8">${legend}</div>`;
+      body.append(mix);
+    }
+  }
+
+  function miniCurve(samples: number[], color: string): HTMLCanvasElement {
+    const c = document.createElement('canvas');
+    c.style.verticalAlign = 'middle';
+    const w = 96;
+    const h = 26;
+    lineChart(setupCanvas(c, w, h), w, h, [{ values: samples, color }]);
+    return c;
+  }
+
+  function renderLineages(lineages: LineageHistory[]): void {
+    const body = lineageCard.body;
+    body.innerHTML = '';
+    if (lineages.length === 0) {
+      body.innerHTML = `<div style="opacity:.5">${t('sampling')}</div>`;
+      return;
+    }
+    const rows = [...lineages].sort((a, b) => b.count - a.count).slice(0, 12);
+    const table = document.createElement('div');
+    table.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+    for (const r of rows) {
+      const c = `hsl(${Math.round(r.hue * 360)}, 90%, 62%)`;
+      const arrow = r.trend > 1 ? '▲' : r.trend < -1 ? '▼' : '—';
+      const ac = r.trend > 1 ? ACCENT : r.trend < -1 ? '#ff5aa6' : 'rgba(207,232,255,.5)';
+      const row = document.createElement('div');
+      row.style.cssText =
+        'display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(120,160,200,0.08);padding-bottom:8px';
+      const left = document.createElement('div');
+      left.style.cssText = 'flex:1;min-width:0';
+      left.innerHTML =
+        `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
+        `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span></div>` +
+        `<div style="opacity:.7;margin-left:16px">${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}</div>` +
+        `<div style="opacity:.5;margin-left:16px;font-size:11px">` +
+        `${t('tr_seek')} ${r.seek.toFixed(2)} · ${t('tr_forage')} ${r.forage.toFixed(2)} · ${t('tr_cruise')} ${r.cruise.toFixed(2)}</div>`;
+      row.append(left, miniCurve(r.samples, c));
+      table.append(row);
+    }
+    body.append(table);
+  }
+
+  function renderWatched(watched: Watched[]): void {
+    const body = watchCard.body;
+    body.innerHTML = '';
+    if (watched.length === 0) {
+      body.innerHTML = `<div style="opacity:.5">${t('obs_watchHint')}</div>`;
+      return;
+    }
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap';
+    for (const wch of watched) {
+      const cur = wch.history[wch.history.length - 1];
+      const c = `hsl(${Math.round(wch.hue * 360)}, 90%, 62%)`;
+      const card = document.createElement('div');
+      card.style.cssText = `${CARD}width:260px`;
+      const alive = cur?.alive ?? false;
+      const head = document.createElement('div');
+      head.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
+      head.innerHTML =
+        `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
+        `<b>#${wch.id}</b> · ${t('lineageWord')} #${wch.lineage}` +
+        `${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>`;
+      const rm = document.createElement('button');
+      rm.textContent = '✕';
+      rm.style.cssText =
+        'background:none;border:none;color:#cfe8ff;cursor:pointer;font-size:15px;line-height:1;opacity:.7';
+      rm.onclick = () => onRemoveWatch(wch.id);
+      head.append(rm);
+      card.append(head);
+
+      const stat = document.createElement('div');
+      stat.style.cssText = 'margin:6px 0;opacity:.85';
+      if (cur) {
+        const turnTxt =
+          cur.turn > 0.1 ? t('turnRight') : cur.turn < -0.1 ? t('turnLeft') : t('straight');
+        stat.innerHTML =
+          `${t('energyWord')} ${cur.energy.toFixed(1)} · ${t('speedWord')} ${cur.speed.toFixed(1)}<br>` +
+          `${t('decision')}: ${turnTxt} · ${t('out_thrust')} ${(cur.thrust * 100).toFixed(0)}%<br>` +
+          `<span style="opacity:.6;font-size:11px">${t('obs_age')} ${wch.history.length} ${t('obs_ticks')}</span>`;
+      }
+      card.append(stat);
+
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:11px;opacity:.6;margin-top:4px';
+      lbl.innerHTML = `${t('obs_energyLine')} <span style="color:${ACCENT}">▬</span> · ${t('obs_speedLine')} <span style="color:#9b8cff">▬</span>`;
+      const cv = document.createElement('canvas');
+      const cw = 228;
+      const chh = 64;
+      lineChart(setupCanvas(cv, cw, chh), cw, chh, [
+        { values: wch.history.map((s) => s.energy), color: ACCENT },
+        { values: wch.history.map((s) => s.speed), color: '#9b8cff' },
+      ]);
+      card.append(lbl, cv);
+      grid.append(card);
+    }
+    body.append(grid);
+  }
+
+  function render(): void {
+    if (!open) return;
+    h1.textContent = `PELAGIA · ${t('observatory')}`;
+    worldCard.title.textContent = t('obs_world');
+    lineageCard.title.textContent = t('obs_lineages');
+    watchCard.title.textContent = t('obs_watched');
+    renderWorld(last.world);
+    renderLineages(last.lineages);
+    renderWatched(last.watched);
+  }
+
+  function relabelToggle(): void {
+    toggle.textContent = '📊 ' + t('observatory');
+  }
+  relabelToggle();
+  onLang(() => {
+    relabelToggle();
+    render();
+  });
+
+  return {
+    panel,
+    toggle,
+    isOpen: () => open,
+    update(data) {
+      last = data;
+      render();
+    },
+  };
+}

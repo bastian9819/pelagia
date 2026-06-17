@@ -21,6 +21,14 @@ import {
   type LineageTraits,
 } from './lineages.js';
 import { buildGodPanel, type GodSpec } from './god.js';
+import {
+  buildObservatory,
+  type ObservatoryData,
+  type WorldSample,
+  type LineageHistory,
+  type Watched,
+  type WatchSample,
+} from './observatory.js';
 import { t, onLang } from './i18n.js';
 import { parseShareState, buildShareUrl, applyHash, copyToClipboard } from './share.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
@@ -130,6 +138,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const inspectBuf = device.createBuffer({ size: INSPECT_FLOATS * 4, usage: S | CS });
   const inspectReadback = device.createBuffer({
     size: INSPECT_FLOATS * 4,
+    usage: GPUBufferUsage.MAP_READ | CD,
+  });
+  // Watch-list read-back: a few tracked creatures sampled through the inspect pass.
+  const MAX_WATCH = 8;
+  const watchReadback = device.createBuffer({
+    size: MAX_WATCH * INSPECT_FLOATS * 4,
     usage: GPUBufferUsage.MAP_READ | CD,
   });
   device.queue.writeBuffer(stateBuf, 0, stateData);
@@ -488,7 +502,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let selectedLineage = -1; // to detect slot reuse (a different creature took the slot)
   let selecting = false;
   let inspectPending = false;
-  const brainView = buildBrainView(() => deselect());
+  const brainView = buildBrainView(
+    () => deselect(),
+    () => {
+      if (selectedIndex >= 0) addWatch(selectedIndex, selectedLineage);
+    },
+  );
   document.body.appendChild(brainView.panel);
   const ring = document.createElement('div');
   ring.style.cssText =
@@ -667,27 +686,214 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     help.style.display = 'grid';
     localStorage.setItem('pelagia-seen-help', '1');
   }
+  // --- Observatory: full-screen data view (world history + lineages + watch-list) ---
+  const MAX_WORLD_SAMPLES = 240; // ring length for every time series
+  const MAX_TRACKED_LINEAGES = 80;
+  interface LinTrack {
+    hue: number;
+    samples: number[];
+    lastTick: number;
+    count: number;
+    trend: number;
+    descKey: string;
+    fast: boolean;
+    seek: number;
+    forage: number;
+    cruise: number;
+  }
+  const worldSeries: WorldSample[] = [];
+  const lineageHist = new Map<number, LinTrack>();
+  const watched = new Map<number, Watched>();
+  let watchPending = false;
+
+  const observatory = buildObservatory((id) => removeWatch(id));
+  document.body.appendChild(observatory.panel);
+  ui.controls.appendChild(observatory.toggle);
+
+  function addWatch(id: number, lineage: number): void {
+    if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
+    watched.set(id, { id, lineage, hue: floatFromU32(pcgHash(lineage)), history: [] });
+    pushObservatory();
+  }
+  function removeWatch(id: number): void {
+    watched.delete(id);
+    pushObservatory();
+  }
+  function buildObservatoryData(): ObservatoryData {
+    const lineages: LineageHistory[] = [];
+    for (const [lin, tr] of lineageHist) {
+      lineages.push({
+        lineage: lin,
+        hue: tr.hue,
+        count: tr.count,
+        trend: tr.trend,
+        descKey: tr.descKey,
+        fast: tr.fast,
+        seek: tr.seek,
+        forage: tr.forage,
+        cruise: tr.cruise,
+        samples: tr.samples,
+      });
+    }
+    return { world: worldSeries, lineages, watched: [...watched.values()] };
+  }
+  function pushObservatory(): void {
+    observatory.update(buildObservatoryData());
+  }
+
+  // Sample the tracked creatures through the inspect pass (one tiny dispatch each;
+  // capped at MAX_WATCH). Records energy/speed/decision history per individual.
+  async function sampleWatched(): Promise<void> {
+    if (watchPending) return;
+    const ids = [...watched.keys()];
+    if (ids.length === 0) return;
+    watchPending = true;
+    try {
+      for (let k = 0; k < ids.length; k++) {
+        pu[22] = ids[k]!;
+        device.queue.writeBuffer(paramsBuf, 0, pbuf);
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(inspectPipeline);
+        pass.setBindGroup(0, inspectBind);
+        pass.dispatchWorkgroups(1);
+        pass.end();
+        enc.copyBufferToBuffer(
+          inspectBuf,
+          0,
+          watchReadback,
+          k * INSPECT_FLOATS * 4,
+          INSPECT_FLOATS * 4,
+        );
+        device.queue.submit([enc.finish()]);
+      }
+      setSelectedUniform(); // restore the live selection index for the brain view
+      device.queue.writeBuffer(paramsBuf, 0, pbuf);
+      await watchReadback.mapAsync(GPUMapMode.READ);
+      const d = new Float32Array(watchReadback.getMappedRange().slice(0));
+      watchReadback.unmap();
+      ids.forEach((id, k) => {
+        const w = watched.get(id);
+        if (!w) return;
+        const o = k * INSPECT_FLOATS;
+        const sameLineage = Math.round(d[o + 26]!) === w.lineage;
+        const sample: WatchSample = {
+          tick: frame,
+          energy: d[o + 24]!,
+          speed: d[o + 23]!,
+          turn: d[o + 18]!,
+          thrust: (d[o + 19]! + 1) / 2,
+          alive: d[o + 27]! >= 0.5 && sameLineage,
+        };
+        w.history.push(sample);
+        if (w.history.length > MAX_WORLD_SAMPLES) w.history.shift();
+      });
+    } finally {
+      watchPending = false;
+    }
+  }
+
+  // Append this sample's population to each clade's curve; track newly-seen clades,
+  // drop vanished ones to zero, and bound the map (evict long-extinct, then small).
+  function updateLineageHistories(
+    counts: Map<number, number>,
+    poolMeta: Map<number, LineageTraits>,
+  ): void {
+    const seen = new Set<number>();
+    for (const [lin, count] of counts) {
+      const meta = poolMeta.get(lin);
+      let tr = lineageHist.get(lin);
+      if (!tr) {
+        if (!meta && count < 2) continue; // only track sizeable or characterised clades
+        tr = {
+          hue: floatFromU32(pcgHash(lin)),
+          samples: [],
+          lastTick: frame,
+          count,
+          trend: 0,
+          descKey: meta?.descKey ?? 'desc_erratic',
+          fast: meta?.fast ?? false,
+          seek: meta?.seek ?? 0,
+          forage: meta?.forage ?? 0,
+          cruise: meta?.cruise ?? 0,
+        };
+        lineageHist.set(lin, tr);
+      }
+      seen.add(lin);
+      tr.trend = count - tr.count;
+      tr.count = count;
+      tr.lastTick = frame;
+      if (meta) {
+        tr.descKey = meta.descKey;
+        tr.fast = meta.fast;
+        tr.seek = meta.seek;
+        tr.forage = meta.forage;
+        tr.cruise = meta.cruise;
+      }
+      tr.samples.push(count);
+      if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
+    }
+    for (const [lin, tr] of lineageHist) {
+      if (seen.has(lin) || tr.count === 0) continue;
+      tr.trend = -tr.count;
+      tr.count = 0;
+      tr.samples.push(0);
+      if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
+    }
+    if (lineageHist.size > MAX_TRACKED_LINEAGES) {
+      const entries = [...lineageHist.entries()].sort((a, b) => {
+        const da = a[1].count === 0 ? 0 : 1;
+        const db = b[1].count === 0 ? 0 : 1;
+        if (da !== db) return da - db; // dead clades first
+        if (da === 0) return a[1].lastTick - b[1].lastTick; // oldest-dead first
+        return a[1].count - b[1].count; // then smallest alive
+      });
+      for (const [lin] of entries) {
+        if (lineageHist.size <= MAX_TRACKED_LINEAGES) break;
+        lineageHist.delete(lin);
+      }
+    }
+  }
+
   let analysisPending = false;
   let lastAnalysisT = 0;
   const prevCounts = new Map<number, number>();
 
-  async function analyzeLineages(): Promise<void> {
+  // Periodic world sample: reads bio + food back, drives the lineage panel AND the
+  // observatory (world time series, lineage histories, tracked creatures).
+  async function sampleWorld(): Promise<void> {
     if (analysisPending) return;
     analysisPending = true;
     try {
       const bRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });
+      const fRead = device.createBuffer({ size: f * 8, usage: GPUBufferUsage.MAP_READ | CD });
       let enc = device.createCommandEncoder();
       enc.copyBufferToBuffer(bioBuf, 0, bRead, 0, n * 16);
+      enc.copyBufferToBuffer(foodBuf, 0, fRead, 0, f * 8);
       device.queue.submit([enc.finish()]);
-      await bRead.mapAsync(GPUMapMode.READ);
+      await Promise.all([bRead.mapAsync(GPUMapMode.READ), fRead.mapAsync(GPUMapMode.READ)]);
       const bi = new Float32Array(bRead.getMappedRange().slice(0));
+      const fo = new Float32Array(fRead.getMappedRange().slice(0));
       bRead.unmap();
       bRead.destroy();
+      let foodAlive = 0;
+      for (let j = 0; j < f; j++) if (fo[j * 2]! >= 0) foodAlive++;
+      fRead.unmap();
+      fRead.destroy();
 
       const counts = new Map<number, number>();
       const repSlot = new Map<number, number>();
+      let aliveCount = 0;
+      let sumE = 0;
+      let minE = Infinity;
+      let maxE = -Infinity;
       for (let i = 0; i < n; i++) {
         if (bi[i * 4 + 2]! < 0.5) continue;
+        aliveCount++;
+        const e = bi[i * 4]!;
+        sumE += e;
+        if (e < minE) minE = e;
+        if (e > maxE) maxE = e;
         const lin = Math.round(bi[i * 4 + 3]!);
         counts.set(lin, (counts.get(lin) ?? 0) + 1);
         if (!repSlot.has(lin)) repSlot.set(lin, i);
@@ -696,6 +902,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       const pool = ranked.slice(0, 16); // characterise a pool, then pick groups
 
       const rows: LineageRow[] = [];
+      const strategy: Record<string, number> = {};
+      const poolMeta = new Map<number, LineageTraits>();
       if (pool.length > 0) {
         const gRead = device.createBuffer({
           size: pool.length * GENOME_SIZE * 4,
@@ -763,8 +971,31 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
         prevCounts.clear();
         for (const [lin, count] of counts) prevCounts.set(lin, count);
+
+        // Strategy mix snapshot + per-lineage trait metadata for the observatory.
+        pool.forEach(([lin, count], k) => {
+          const tr = traits[k]!;
+          strategy[tr.descKey] = (strategy[tr.descKey] ?? 0) + count;
+          poolMeta.set(lin, tr);
+        });
       }
       lineagePanel.update(rows);
+
+      // --- Observatory time series ---
+      updateLineageHistories(counts, poolMeta);
+      worldSeries.push({
+        tick: frame,
+        alive: aliveCount,
+        foodAlive,
+        lineages: counts.size,
+        energyAvg: aliveCount ? sumE / aliveCount : 0,
+        energyMin: aliveCount ? minE : 0,
+        energyMax: aliveCount ? maxE : 0,
+        strategy,
+      });
+      if (worldSeries.length > MAX_WORLD_SAMPLES) worldSeries.shift();
+      await sampleWatched();
+      pushObservatory();
     } finally {
       analysisPending = false;
     }
@@ -1030,7 +1261,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       ui.update(alive, fps, frame);
       if (now - lastAnalysisT > 1500) {
         lastAnalysisT = now;
-        void analyzeLineages();
+        void sampleWorld();
       }
     }
     requestAnimationFrame(tick);

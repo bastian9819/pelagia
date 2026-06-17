@@ -37,7 +37,7 @@ function actColor(v: number): string {
   return v >= 0 ? `rgba(63,240,216,${0.12 + 0.88 * m})` : `rgba(255,90,170,${0.12 + 0.88 * m})`;
 }
 
-export function buildBrainView(onClose: () => void): BrainView {
+export function buildBrainView(onClose: () => void, onTrack: () => void): BrainView {
   const panel = document.createElement('div');
   panel.style.cssText =
     'position:fixed;top:12px;right:12px;width:348px;padding:12px 14px;display:none;' +
@@ -48,12 +48,27 @@ export function buildBrainView(onClose: () => void): BrainView {
   header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
   const title = document.createElement('div');
   title.style.cssText = 'font-weight:600;letter-spacing:.1em;color:#3ff0d8;';
+  const right = document.createElement('div');
+  right.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  // "Track" pins this creature into the observatory's watch-list.
+  const track = document.createElement('button');
+  track.style.cssText =
+    'padding:3px 9px;background:rgba(63,240,216,0.14);color:#cfe8ff;border:1px solid ' +
+    'rgba(63,240,216,0.3);border-radius:7px;cursor:pointer;font:inherit;font-size:11px;';
+  let trackTimer = 0;
+  track.onclick = () => {
+    onTrack();
+    track.textContent = '✓ ' + t('tracking');
+    window.clearTimeout(trackTimer);
+    trackTimer = window.setTimeout(() => (track.textContent = '＋ ' + t('track')), 1200);
+  };
   const close = document.createElement('button');
   close.textContent = '×';
   close.style.cssText =
     'background:none;border:none;color:#cfe8ff;font-size:18px;cursor:pointer;line-height:1;';
   close.onclick = onClose;
-  header.append(title, close);
+  right.append(track, close);
+  header.append(title, right);
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -66,8 +81,10 @@ export function buildBrainView(onClose: () => void): BrainView {
   panel.append(header, canvas, stats);
 
   title.textContent = t('creatureBrain');
+  track.textContent = '＋ ' + t('track');
   onLang(() => {
     title.textContent = t('creatureBrain');
+    track.textContent = '＋ ' + t('track');
   });
 
   const colY = (count: number, i: number, top: number, bottom: number): number =>
