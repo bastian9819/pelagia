@@ -15,6 +15,7 @@ import { wrapDelta } from '../core/space.js';
 import { buildUi } from './ui.js';
 import { buildBrainView } from './brainView.js';
 import { buildLineagePanel, characterizeGenome, type LineageRow } from './lineages.js';
+import { buildGodPanel, type GodSpec } from './god.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
 
 /**
@@ -535,6 +536,24 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const lineagePanel = buildLineagePanel();
   document.body.appendChild(lineagePanel.panel);
   ui.controls.appendChild(lineagePanel.toggle);
+
+  // --- God mode: live world parameters (write straight into the params uniform) ---
+  const godSpecs: GodSpec[] = [
+    { label: 'food spawn', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1, value: pf[15] },
+    { label: 'mutation rate', idx: 12, min: 0, max: 0.5, step: 0.01, value: pf[12] },
+    { label: 'mutation size', idx: 13, min: 0, max: 1, step: 0.02, value: pf[13] },
+    { label: 'max speed', idx: 3, min: 0.5, max: 10, step: 0.1, value: pf[3] },
+    { label: 'agility', idx: 4, min: 0.05, max: 1.2, step: 0.01, value: pf[4] },
+    { label: 'metabolism', idx: 8, min: 0, max: 0.6, step: 0.01, value: pf[8] },
+    { label: 'food energy', idx: 7, min: 2, max: 30, step: 0.5, value: pf[7] },
+    { label: 'reproduce at', idx: 10, min: 30, max: 200, step: 1, value: pf[10] },
+  ];
+  const godPanel = buildGodPanel(godSpecs, (idx, value) => {
+    pf[idx] = value;
+    device.queue.writeBuffer(paramsBuf, 0, pbuf); // apply immediately (even if paused)
+  });
+  document.body.appendChild(godPanel.panel);
+  ui.controls.appendChild(godPanel.toggle);
   let analysisPending = false;
   let lastAnalysisT = 0;
   const prevCounts = new Map<number, number>();
