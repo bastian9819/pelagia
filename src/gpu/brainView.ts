@@ -10,12 +10,29 @@ import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../
 
 export interface BrainView {
   panel: HTMLElement;
-  update(data: Float32Array): void;
+  /** `frame` lets the decision tape advance once per sim tick (not per render). */
+  update(data: Float32Array, frame: number): void;
   /** Provide the selected creature's full genome (for the static policy view). */
   setGenome(genome: Float32Array | null): void;
   show(): void;
   hide(): void;
 }
+
+// Decision tape (EEG) channels: a few sensors + the two decisions, over time.
+const EEG_CHANNELS: {
+  key: string;
+  color: string;
+  lo: number;
+  hi: number;
+  get: (d: Float32Array) => number;
+}[] = [
+  { key: 'bv_food', color: '#3ff0d8', lo: 0, hi: 1, get: (d) => d[2]! },
+  { key: 'bv_nbr', color: '#ff9f43', lo: 0, hi: 1, get: (d) => d[5]! },
+  { key: 'energyWord', color: '#9b8cff', lo: 0, hi: 1, get: (d) => Math.min(1, d[6]!) },
+  { key: 'out_turn', color: '#ff5aa6', lo: -1, hi: 1, get: (d) => d[18]! },
+  { key: 'out_thrust', color: '#5ad1ff', lo: 0, hi: 1, get: (d) => (d[19]! + 1) / 2 },
+];
+const EEG_LEN = 160; // samples kept (one per sim tick)
 
 const INPUT_KEYS = [
   'in_foodAhead',
@@ -43,9 +60,9 @@ function actColor(v: number): string {
 export function buildBrainView(onClose: () => void, onTrack: () => void): BrainView {
   const panel = document.createElement('div');
   panel.style.cssText =
-    'position:fixed;top:12px;right:12px;width:348px;padding:12px 14px;display:none;' +
-    'font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;' +
-    'background:rgba(2,4,10,0.72);border:1px solid rgba(63,240,216,0.22);border-radius:10px;';
+    'position:fixed;top:12px;right:12px;width:348px;max-height:calc(100vh - 24px);overflow:auto;' +
+    'padding:12px 14px;display:none;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;' +
+    'color:#cfe8ff;background:rgba(2,4,10,0.72);border:1px solid rgba(63,240,216,0.22);border-radius:10px;';
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
@@ -94,7 +111,22 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
 
   const stats = document.createElement('div');
   stats.style.cssText = 'margin-top:6px;line-height:1.6;';
-  panel.append(header, canvas, policyLabel, policy, listens, stats);
+
+  // Decision tape (EEG): sensors + decisions of this creature scrolling over time.
+  const tapeLabel = document.createElement('div');
+  tapeLabel.style.cssText = 'margin-top:10px;font-size:10px;opacity:.7;';
+  const TW = W;
+  const laneH = 22;
+  const TH = EEG_CHANNELS.length * laneH;
+  const tape = document.createElement('canvas');
+  tape.width = TW;
+  tape.height = TH;
+  tape.style.cssText = `display:block;width:${TW}px;height:${TH}px;margin-top:4px;`;
+  const tcx = tape.getContext('2d')!;
+  const eeg: number[][] = EEG_CHANNELS.map(() => []);
+  let lastEegFrame = -1;
+
+  panel.append(header, canvas, policyLabel, policy, listens, stats, tapeLabel, tape);
 
   // Selected creature's genome (static per creature) for the policy view.
   let genome: Float32Array | null = null;
@@ -172,12 +204,70 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     listens.textContent = neuronSummary();
   }
 
+  function clearTape(): void {
+    for (const c of eeg) c.length = 0;
+    lastEegFrame = -1;
+    drawTape();
+  }
+
+  // One sample per sim tick (deduped by frame, so a paused tape freezes and the
+  // step button advances it exactly one decision at a time).
+  function pushTape(d: Float32Array, frame: number): void {
+    if (frame === lastEegFrame) return;
+    lastEegFrame = frame;
+    for (let ch = 0; ch < EEG_CHANNELS.length; ch++) {
+      const arr = eeg[ch]!;
+      arr.push(EEG_CHANNELS[ch]!.get(d));
+      if (arr.length > EEG_LEN) arr.shift();
+    }
+    drawTape();
+  }
+
+  function drawTape(): void {
+    tcx.clearRect(0, 0, TW, TH);
+    for (let ch = 0; ch < EEG_CHANNELS.length; ch++) {
+      const def = EEG_CHANNELS[ch]!;
+      const top = ch * laneH;
+      // lane separator + baseline
+      tcx.strokeStyle = 'rgba(120,160,200,0.10)';
+      tcx.lineWidth = 1;
+      tcx.beginPath();
+      tcx.moveTo(0, top + laneH - 0.5);
+      tcx.lineTo(TW, top + laneH - 0.5);
+      tcx.stroke();
+      // label
+      tcx.fillStyle = 'rgba(207,232,255,0.55)';
+      tcx.font = '9px ui-monospace, monospace';
+      tcx.textBaseline = 'top';
+      tcx.textAlign = 'left';
+      tcx.fillText(t(def.key), 3, top + 2);
+      // signal
+      const arr = eeg[ch]!;
+      if (arr.length >= 2) {
+        tcx.strokeStyle = def.color;
+        tcx.lineWidth = 1.4;
+        tcx.beginPath();
+        for (let i = 0; i < arr.length; i++) {
+          const x = (i / (EEG_LEN - 1)) * TW;
+          const norm = (arr[i]! - def.lo) / (def.hi - def.lo);
+          const y = top + (laneH - 3) - Math.max(0, Math.min(1, norm)) * (laneH - 5);
+          if (i === 0) tcx.moveTo(x, y);
+          else tcx.lineTo(x, y);
+        }
+        tcx.stroke();
+      }
+    }
+  }
+
   title.textContent = t('creatureBrain');
   track.textContent = '＋ ' + t('track');
+  tapeLabel.textContent = t('eeg_title');
   onLang(() => {
     title.textContent = t('creatureBrain');
     track.textContent = '＋ ' + t('track');
+    tapeLabel.textContent = t('eeg_title');
     refreshPolicy();
+    drawTape();
   });
 
   const colY = (count: number, i: number, top: number, bottom: number): number =>
@@ -246,6 +336,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     panel,
     setGenome(g) {
       genome = g;
+      clearTape(); // new selection -> fresh tape
       refreshPolicy();
     },
     show() {
@@ -254,7 +345,8 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     hide() {
       panel.style.display = 'none';
     },
-    update(d) {
+    update(d, frame) {
+      pushTape(d, frame);
       const inputs = Array.from(d.subarray(0, 8));
       const hidden = Array.from(d.subarray(8, 18));
       const outputs = Array.from(d.subarray(18, 20));

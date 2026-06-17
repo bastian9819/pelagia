@@ -1324,6 +1324,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     if (selectedIndex >= 0 && !inspectPending) {
       setSelectedUniform();
       writeParams(frame); // includes pu[22] = selectedIndex
+      const inspectFrame = frame; // tag the sample so the decision tape advances per tick
       const ienc = device.createCommandEncoder();
       const ipass = ienc.beginComputePass();
       ipass.setPipeline(inspectPipeline);
@@ -1341,11 +1342,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const alive = d[27]! >= 0.5;
         const sameLineage = Math.round(d[26]!) === selectedLineage;
         if (alive && sameLineage) {
-          brainView.update(d);
+          brainView.update(d, inspectFrame);
           positionRing(d);
         } else if (!alive && sameLineage) {
           // Our creature died: show it deceased once, then stop following.
-          brainView.update(d);
+          brainView.update(d, inspectFrame);
           ring.style.display = 'none';
           selectedIndex = -1;
           setSelectedUniform();

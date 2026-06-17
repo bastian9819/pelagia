@@ -81,6 +81,10 @@ const S: Dict = {
   bv_food: { en: 'food', es: 'comida' },
   bv_nbr: { en: 'neighbour', es: 'vecino' },
   bv_listens: { en: 'neurons attend to', es: 'las neuronas atienden a' },
+  eeg_title: {
+    en: 'decision tape (senses → decisions)',
+    es: 'tira de decisiones (sentidos → decisiones)',
+  },
   turnRight: { en: 'right ▶', es: 'derecha ▶' },
   turnLeft: { en: '◀ left', es: '◀ izquierda' },
   straight: { en: '— straight', es: '— recto' },
