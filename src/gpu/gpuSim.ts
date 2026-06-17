@@ -11,6 +11,7 @@ import { DEFAULT_CONFIG } from '../core/config.js';
 import { GENOME_SIZE } from '../sim/brain.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
+import { buildUi } from './ui.js';
 
 /**
  * Phase 2.0: the full evolving ecosystem on the GPU — grid build, sense, brain,
@@ -280,8 +281,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let presentBind!: GPUBindGroup;
   function resize(): void {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const cw = Math.floor(window.innerWidth * dpr);
-    const ch = Math.floor(window.innerHeight * dpr);
+    const cw = Math.max(1, Math.floor(window.innerWidth * dpr));
+    const ch = Math.max(1, Math.floor(window.innerHeight * dpr));
     canvas.width = cw;
     canvas.height = ch;
 
@@ -314,24 +315,93 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       })
       .end();
     device.queue.submit([enc.finish()]);
+    updateView();
+  }
 
-    const s = Math.min(cw / world, ch / world);
-    renderData[0] = (s / cw) * 2;
-    renderData[1] = -(s / ch) * 2;
-    renderData[2] = ((cw - world * s) / 2 / cw) * 2 - 1;
-    renderData[3] = 1 - ((ch - world * s) / 2 / ch) * 2;
-    renderData[4] = Math.max(cellSize * 0.22, world / 220); // glow radius (world units)
+  // --- Camera (zoom + pan) ---
+  const cam = { zoom: 1, cx: world / 2, cy: world / 2 };
+  function ppwNow(): number {
+    return Math.min(canvas.width / world, canvas.height / world) * cam.zoom;
+  }
+  function clampCam(): void {
+    cam.zoom = Math.min(60, Math.max(1, cam.zoom));
+    cam.cx = Math.min(world, Math.max(0, cam.cx));
+    cam.cy = Math.min(world, Math.max(0, cam.cy));
+  }
+  function updateView(): void {
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const ppw = ppwNow();
+    renderData[0] = (2 * ppw) / cw; // sx (world -> NDC)
+    renderData[2] = (-2 * cam.cx * ppw) / cw; // ox
+    renderData[1] = (-2 * ppw) / ch; // sy (flip y)
+    renderData[3] = (2 * cam.cy * ppw) / ch; // oy
+    // Glow radius in world units, set so the ON-SCREEN size stays in a sane band
+    // (~2.5px when zoomed out so creatures are still visible, capped ~16px when
+    // zoomed in so they read as creatures, not giant blobs). 5 = creature scale.
+    renderData[4] = Math.min(16 / ppw, Math.max(2.5 / ppw, 5));
     renderData[5] = 1.4; // brightness (HDR; tonemapped on present)
     device.queue.writeBuffer(renderUbo, 0, renderData);
   }
+  function screenToWorld(clientX: number, clientY: number): { wx: number; wy: number } {
+    const dpr = canvas.width / window.innerWidth;
+    const ppw = ppwNow();
+    return {
+      wx: (clientX * dpr - canvas.width / 2) / ppw + cam.cx,
+      wy: (clientY * dpr - canvas.height / 2) / ppw + cam.cy,
+    };
+  }
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      const before = screenToWorld(e.clientX, e.clientY);
+      cam.zoom *= Math.exp(-e.deltaY * 0.0015);
+      clampCam();
+      const after = screenToWorld(e.clientX, e.clientY);
+      cam.cx += before.wx - after.wx; // keep the point under the cursor fixed
+      cam.cy += before.wy - after.wy;
+      clampCam();
+      updateView();
+    },
+    { passive: false },
+  );
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const ppw = ppwNow();
+    const dpr = canvas.width / window.innerWidth;
+    cam.cx -= ((e.clientX - lastX) * dpr) / ppw;
+    cam.cy -= ((e.clientY - lastY) * dpr) / ppw;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    clampCam();
+    updateView();
+  });
+  canvas.addEventListener('pointerup', () => {
+    dragging = false;
+  });
+
   resize();
   window.addEventListener('resize', resize);
 
-  const hud = document.createElement('div');
-  hud.style.cssText =
-    'position:fixed;top:8px;left:8px;padding:8px 12px;font:13px ui-monospace,monospace;' +
-    'color:#cfe8ff;background:rgba(2,4,10,0.55);border-radius:6px;white-space:pre;pointer-events:none';
-  document.body.appendChild(hud);
+  // --- Stats panel + controls ---
+  const ui = buildUi(() => {
+    cam.zoom = 1;
+    cam.cx = world / 2;
+    cam.cy = world / 2;
+    updateView();
+  });
+  document.body.appendChild(ui.panel);
+  document.body.appendChild(ui.controls);
 
   // Occasional non-blocking readback of the alive count (= n - freeCount).
   let alive = n;
@@ -460,11 +530,26 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   opts.onReady?.();
 
   function tick(): void {
-    writeParams(frame);
-    const encoder = device.createCommandEncoder();
-    recordSim(encoder);
+    // Keep the drawing buffer in sync with the viewport (handles a late initial
+    // layout where innerWidth was 0, and any window resize).
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const wantW = Math.max(1, Math.floor(window.innerWidth * dpr));
+    const wantH = Math.max(1, Math.floor(window.innerHeight * dpr));
+    if (canvas.width !== wantW || canvas.height !== wantH) resize();
 
-    // Accumulation pass: fade previous frame (trails) -> food -> creatures.
+    // Simulation steps (paused -> 0). Each step is its own submit so the frame
+    // counter (used for RNG keying) varies per tick.
+    const steps = ui.paused ? 0 : ui.speed;
+    for (let k = 0; k < steps; k++) {
+      writeParams(frame);
+      const enc = device.createCommandEncoder();
+      recordSim(enc);
+      device.queue.submit([enc.finish()]);
+      frame++;
+    }
+
+    // Render every frame (so trails keep fading even while paused).
+    const encoder = device.createCommandEncoder();
     const accumPass = encoder.beginRenderPass({
       colorAttachments: [{ view: accumView, loadOp: 'load', storeOp: 'store' }],
     });
@@ -478,7 +563,6 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     accumPass.draw(6, n);
     accumPass.end();
 
-    // Present pass: tonemap the accumulation texture to the swapchain.
     const view = context!.getCurrentTexture().createView();
     const present = encoder.beginRenderPass({
       colorAttachments: [
@@ -491,7 +575,6 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     present.end();
     device.queue.submit([encoder.finish()]);
 
-    frame++;
     frames++;
     const now = performance.now();
     if (now - lastFpsT >= 500) {
@@ -499,7 +582,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       frames = 0;
       lastFpsT = now;
       pollAlive();
-      hud.textContent = `PELAGIA\n${alive.toLocaleString()} creatures alive\ntick ${frame.toLocaleString()} · ${fps.toFixed(0)} fps`;
+      ui.update(alive, fps, frame);
     }
     requestAnimationFrame(tick);
   }

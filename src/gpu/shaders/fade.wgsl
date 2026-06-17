@@ -10,5 +10,6 @@ fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
 @fragment
 fn fs() -> @location(0) vec4<f32> {
   // RGB ~ deep ocean; alpha = per-frame fade rate (higher = shorter trails).
-  return vec4<f32>(0.006, 0.013, 0.03, 0.10);
+  // Shorter trails so the creature bodies read clearly (not just streaks).
+  return vec4<f32>(0.006, 0.013, 0.03, 0.18);
 }

@@ -42,19 +42,25 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   }
   let q = quad[vi];
   let s = state[ii];
-  let world = vec2<f32>(s.x, s.y) + q * R.sizeWorld;
+  // Orient the billboard so local +y points along the heading (swim direction).
+  let a = s.z - 1.5707963;
+  let ca = cos(a);
+  let sa = sin(a);
+  let rl = vec2<f32>(q.x * ca - q.y * sa, q.x * sa + q.y * ca);
+  let world = vec2<f32>(s.x, s.y) + rl * R.sizeWorld;
   out.pos = vec4<f32>(world.x * R.view.x + R.view.z, world.y * R.view.y + R.view.w, 0.0, 1.0);
-  out.uv = q;
-  // Slightly brighter when younger/faster could come later; keep hue for now.
+  out.uv = q; // unrotated local coords; +y is the creature's front
   out.color = hue2rgb(b.y) * R.brightness;
   return out;
 }
 
 @fragment
 fn fs(in: VSOut) -> @location(0) vec4<f32> {
-  let d = length(in.uv);
-  let halo = smoothstep(1.0, 0.0, d); // soft outer glow
-  let core = smoothstep(0.4, 0.0, d); // bright core
-  let intensity = halo * halo * 0.5 + core * 1.4;
+  let u = in.uv;
+  // Tadpole body: narrower across (x), elongated along the heading (y).
+  let body = smoothstep(1.0, 0.0, length(vec2<f32>(u.x * 1.7, u.y)));
+  // Bright head toward the front (+y); a faint tail behind it.
+  let head = smoothstep(0.55, 0.0, length(vec2<f32>(u.x * 1.6, u.y - 0.35)));
+  let intensity = body * body * 0.45 + head * 1.5;
   return vec4<f32>(in.color * intensity, 1.0); // additive blend
 }
