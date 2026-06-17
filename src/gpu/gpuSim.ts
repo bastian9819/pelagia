@@ -9,14 +9,15 @@ import fadeShader from './shaders/fade.wgsl?raw';
 import presentShader from './shaders/present.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
 import { GENOME_SIZE } from '../sim/brain.js';
-import { pcgHash, floatFromU32 } from '../core/rng.js';
+import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
-import { buildUi } from './ui.js';
+import { buildUi, mkBtn } from './ui.js';
 import { buildBrainView } from './brainView.js';
 import { buildLineagePanel, characterizeGenome, type LineageRow } from './lineages.js';
 import { buildGodPanel, type GodSpec } from './god.js';
 import { t, onLang } from './i18n.js';
+import { parseShareState, buildShareUrl, applyHash, copyToClipboard } from './share.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
 
 /**
@@ -38,7 +39,12 @@ export interface OceanOptions {
 }
 
 export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): Promise<void> {
-  const requestedN = opts.n;
+  // Phase 5: a shared link restores seed + N + god-mode params; a fresh visit
+  // gets a random seed so every ocean is novel (and worth sharing). The seed
+  // drives both the CPU-side init below and the GPU shader RNG (via pu[23]).
+  const share = parseShareState();
+  const seed = (share?.seed ?? Math.floor(Math.random() * 0x100000000)) >>> 0;
+  const requestedN = share?.n ?? opts.n;
   const { device, format } = await initGpu();
   device.addEventListener('uncapturederror', (e) => {
     // Surface async WebGPU validation errors (otherwise the whole command
@@ -62,27 +68,33 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const rows = Math.ceil(world / cellSize);
   const numCells = cols * rows;
 
-  // --- Initial data ---
+  // --- Initial data (seeded: same seed -> same starting ocean) ---
+  // Independent RNG streams so positions, genomes and food don't couple, and
+  // capping N (low-memory device) still gives the first n creatures the same
+  // draws as a higher-N run of the same seed (graceful degradation, R-002).
+  const rngState = new Rng(seed, 1);
+  const rngWeights = new Rng(seed, 2);
+  const rngFood = new Rng(seed, 3);
   const stateData = new Float32Array(n * 4);
   const bioData = new Float32Array(n * 4);
   const weightsData = new Float32Array(n * GENOME_SIZE);
   const foodData = new Float32Array(f * 2);
   for (let i = 0; i < n; i++) {
-    stateData[i * 4 + 0] = Math.random() * world;
-    stateData[i * 4 + 1] = Math.random() * world;
-    stateData[i * 4 + 2] = Math.random() * Math.PI * 2;
+    stateData[i * 4 + 0] = rngState.nextFloat() * world;
+    stateData[i * 4 + 1] = rngState.nextFloat() * world;
+    stateData[i * 4 + 2] = rngState.nextFloat() * Math.PI * 2;
     bioData[i * 4 + 0] = cfg.initialEnergy;
     bioData[i * 4 + 1] = floatFromU32(pcgHash(i)); // hue derived from lineage id
     bioData[i * 4 + 2] = 1; // alive
     bioData[i * 4 + 3] = i; // lineage id (= founder slot; inherited unchanged)
   }
   for (let i = 0; i < weightsData.length; i++) {
-    weightsData[i] = (Math.random() * 2 - 1) * cfg.weightInitStd;
+    weightsData[i] = (rngWeights.nextFloat() * 2 - 1) * cfg.weightInitStd;
   }
   for (let j = 0; j < f; j++) {
     if (j < foodInitAlive) {
-      foodData[j * 2 + 0] = Math.random() * world;
-      foodData[j * 2 + 1] = Math.random() * world;
+      foodData[j * 2 + 0] = rngFood.nextFloat() * world;
+      foodData[j * 2 + 1] = rngFood.nextFloat() * world;
     } else {
       foodData[j * 2 + 0] = -1; // dead slot (sentinel)
       foodData[j * 2 + 1] = -1;
@@ -143,6 +155,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pu[18] = numCells;
   pu[19] = n;
   pu[20] = f;
+  pu[23] = seed >>> 0; // world seed: folded into the shader RNG (mutation/respawn)
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -542,22 +555,52 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   ui.controls.appendChild(lineagePanel.toggle);
 
   // --- God mode: live world parameters (write straight into the params uniform) ---
-  const godSpecs: GodSpec[] = [
-    { labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1, value: pf[15] },
-    { labelKey: 'g_mutRate', idx: 12, min: 0, max: 0.5, step: 0.01, value: pf[12] },
-    { labelKey: 'g_mutSize', idx: 13, min: 0, max: 1, step: 0.02, value: pf[13] },
-    { labelKey: 'g_speed', idx: 3, min: 0.5, max: 10, step: 0.1, value: pf[3] },
-    { labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01, value: pf[4] },
-    { labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01, value: pf[8] },
-    { labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5, value: pf[7] },
-    { labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1, value: pf[10] },
+  const godDefs: Omit<GodSpec, 'value'>[] = [
+    { labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1 },
+    { labelKey: 'g_mutRate', idx: 12, min: 0, max: 0.5, step: 0.01 },
+    { labelKey: 'g_mutSize', idx: 13, min: 0, max: 1, step: 0.02 },
+    { labelKey: 'g_speed', idx: 3, min: 0.5, max: 10, step: 0.1 },
+    { labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01 },
+    { labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
+    { labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
+    { labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1 },
   ];
+  // Restore shared god params into the uniform BEFORE warmup and before building
+  // the sliders, so the warmed-up ocean and the slider positions both reflect the
+  // link. Only known god indices are honoured, each value clamped to its slider
+  // range (defends against a malformed/hostile hash).
+  if (share?.params) {
+    for (const { idx, value } of share.params) {
+      const def = godDefs.find((d) => d.idx === idx);
+      if (def) pf[idx] = Math.min(def.max, Math.max(def.min, value));
+    }
+    device.queue.writeBuffer(paramsBuf, 0, pbuf);
+  }
+  const godSpecs: GodSpec[] = godDefs.map((d) => ({ ...d, value: pf[d.idx]! }));
   const godPanel = buildGodPanel(godSpecs, (idx, value) => {
     pf[idx] = value;
     device.queue.writeBuffer(paramsBuf, 0, pbuf); // apply immediately (even if paused)
   });
   document.body.appendChild(godPanel.panel);
   ui.controls.appendChild(godPanel.toggle);
+
+  // --- Share: copy a reproducible-ocean URL (seed + N + live god params) ---
+  let shareFeedbackTimer = 0;
+  const shareBtn = mkBtn('', () => void onShare());
+  function relabelShare(): void {
+    shareBtn.textContent = '🔗 ' + t('share');
+  }
+  async function onShare(): Promise<void> {
+    const state = { seed, n, params: godPanel.getValues() };
+    applyHash(state); // reflect the current ocean in the address bar
+    const ok = await copyToClipboard(buildShareUrl(state));
+    window.clearTimeout(shareFeedbackTimer);
+    shareBtn.textContent = ok ? '✓ ' + t('copied') : '🔗 ' + t('share');
+    shareFeedbackTimer = window.setTimeout(relabelShare, 1500);
+  }
+  relabelShare();
+  onLang(relabelShare);
+  ui.controls.appendChild(shareBtn);
 
   // --- Help / pedagogical panel ---
   const help = document.createElement('div');
@@ -698,6 +741,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   (globalThis as unknown as { __pelagia: unknown }).__pelagia = {
     n,
     f,
+    seed,
     get tick() {
       return frame;
     },

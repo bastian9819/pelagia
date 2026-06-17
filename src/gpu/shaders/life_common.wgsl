@@ -7,7 +7,7 @@ struct Params {
   p2: vec4<f32>, // baseCost, moveCost, reproThreshold, initialEnergy
   p3: vec4<f32>, // mutationRate, mutationStd, offspringFraction, _
   d0: vec4<u32>, // cols, rows, numCells, n
-  d1: vec4<u32>, // f (food count), frame, _, _
+  d1: vec4<u32>, // f (food count), frame, selectedIndex, worldSeed
 };
 
 // Group 0: creature + world state.
@@ -42,8 +42,11 @@ fn pcg(v: u32) -> u32 {
   let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
   return (w >> 22u) ^ w;
 }
+// Fold the world seed (P.d1.w) into every draw so a seed reproduces not just the
+// initial ocean but its whole trajectory (mutation, food respawn). gaussian()
+// routes through rnd(), so seeding here covers both.
 fn rnd(a: u32, b: u32) -> f32 {
-  return f32(pcg(pcg(a) ^ b)) / 4294967296.0;
+  return f32(pcg(pcg(a ^ P.d1.w) ^ b)) / 4294967296.0;
 }
 fn gaussian(a: u32, b: u32) -> f32 {
   let u1 = max(rnd(a, b), 1e-7);

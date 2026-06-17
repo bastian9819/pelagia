@@ -16,6 +16,8 @@ const S: Dict = {
   lineages: { en: 'lineages', es: 'linajes' },
   god: { en: 'god', es: 'dios' },
   help: { en: 'help', es: 'ayuda' },
+  share: { en: 'share', es: 'compartir' },
+  copied: { en: 'link copied', es: 'enlace copiado' },
   dominantLineages: { en: 'dominant lineages', es: 'linajes dominantes' },
   sampling: { en: 'sampling…', es: 'muestreando…' },
   creatureBrain: { en: 'creature brain', es: 'cerebro de la criatura' },

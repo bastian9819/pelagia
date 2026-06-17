@@ -15,7 +15,7 @@ export interface OceanUi {
   readonly speed: number;
 }
 
-function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
+export function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.textContent = label;
   b.style.cssText =

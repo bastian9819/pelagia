@@ -18,6 +18,8 @@ export interface GodSpec {
 export interface GodPanel {
   panel: HTMLElement;
   toggle: HTMLButtonElement;
+  /** Current live slider values as (params index -> value) pairs (for sharing). */
+  getValues(): { idx: number; value: number }[];
 }
 
 export function buildGodPanel(
@@ -94,7 +96,12 @@ export function buildGodPanel(
   relabel();
   onLang(relabel);
 
-  return { panel, toggle };
+  return {
+    panel,
+    toggle,
+    getValues: () =>
+      inputs.map(({ input, spec }) => ({ idx: spec.idx, value: Number(input.value) })),
+  };
 }
 
 function fmt(v: number): string {
