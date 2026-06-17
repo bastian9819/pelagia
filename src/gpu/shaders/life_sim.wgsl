@@ -98,8 +98,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   inp[6] = b.x / P.p2.z; // energy / reproThreshold
   inp[7] = s.w / P.p0.w; // speed / maxSpeed
 
-  // Brain forward pass.
+  // Brain forward pass. Disabled neurons (activation gene < 0) contribute nothing.
   var p = i * GENOME_SIZE;
+  let actBase = i * GENOME_SIZE + WEIGHT_GENES;
   var hidden: array<f32, HIDDEN_SIZE>;
   for (var h = 0u; h < HIDDEN_SIZE; h = h + 1u) {
     var sum = 0.0;
@@ -109,7 +110,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     sum = sum + weights[p];
     p = p + 1u;
-    hidden[h] = tanh(sum);
+    hidden[h] = select(0.0, tanh(sum), weights[actBase + h] >= 0.0);
   }
   var out: array<f32, OUTPUT_SIZE>;
   for (var o = 0u; o < OUTPUT_SIZE; o = o + 1u) {
@@ -158,7 +159,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let pdy = wrapDelta(np.y - ny, H);
     if (pdx * pdx + pdy * pdy <= eatR * eatR) {
       let preyE = bio[nbrIdx].x;
-      if (energy > preyE * PREDATION_MARGIN) {
+      if (energy > preyE * P.ext.y) { // predation margin (god-tunable, >= 1)
         let claim = atomicCompareExchangeWeak(&gridData[eatenIdx(nbrIdx)], 0u, i + 1u);
         if (claim.exchanged) {
           energy = energy + gain * max(0.0, preyE);

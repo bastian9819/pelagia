@@ -30,9 +30,20 @@ export const INPUT_SIZE = 8;
 export const HIDDEN_SIZE = 10;
 export const OUTPUT_SIZE = 2;
 
-/** Number of weights (including biases) in one genome. */
-export const GENOME_SIZE =
+/** Weights (including biases) per genome, excluding the activation genes. */
+export const WEIGHT_GENES =
   INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE;
+
+/**
+ * Phase 6 — evolvable brain complexity. Each hidden neuron has an ACTIVATION GENE
+ * appended after the weights (HIDDEN_SIZE of them). A neuron contributes only when
+ * its gene is >= 0; mutation can flip a gene across zero, so offspring effectively
+ * gain or lose neurons across generations — "growing new neurons", as in real
+ * evolution — while the genome stays a fixed-size flat vector (GPU-friendly: every
+ * brain shares one shape, no thread divergence; D-005). A zero gene means active,
+ * so an all-zero genome behaves exactly as before.
+ */
+export const GENOME_SIZE = WEIGHT_GENES + HIDDEN_SIZE;
 
 /**
  * Evaluate the network whose weights start at `offset` in `weights`.
@@ -50,12 +61,14 @@ export function forward(
   outputs: Float32Array,
 ): void {
   let p = offset;
+  const act = offset + WEIGHT_GENES; // activation genes, one per hidden neuron
 
   for (let h = 0; h < HIDDEN_SIZE; h++) {
     let sum = 0;
     for (let i = 0; i < INPUT_SIZE; i++) sum += weights[p++]! * inputs[i]!;
     sum += weights[p++]!; // bias
-    hidden[h] = Math.tanh(sum);
+    // Disabled neurons (activation gene < 0) contribute nothing this generation.
+    hidden[h] = weights[act + h]! >= 0 ? Math.tanh(sum) : 0;
   }
 
   for (let o = 0; o < OUTPUT_SIZE; o++) {

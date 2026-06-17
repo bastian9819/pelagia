@@ -39,6 +39,14 @@ const S: Dict = {
   tracking: { en: 'tracking', es: 'siguiendo' },
   obs_energyLine: { en: 'energy', es: 'energía' },
   obs_speedLine: { en: 'speed', es: 'velocidad' },
+  nar_pop: { en: 'Population', es: 'Población' },
+  nar_rising: { en: 'rising', es: 'al alza' },
+  nar_stable: { en: 'holding steady', es: 'estable' },
+  nar_falling: { en: 'falling', es: 'a la baja' },
+  nar_predActive: { en: 'Predation active', es: 'Depredación activa' },
+  nar_predOff: { en: 'no predation', es: 'sin depredación' },
+  nar_strategy: { en: 'Dominant strategy', es: 'Estrategia dominante' },
+  nar_complexity: { en: 'mean brain', es: 'cerebro medio' },
   obs_age: { en: 'seen for', es: 'visto durante' },
   obs_ticks: { en: 'ticks', es: 'ticks' },
   dominantLineages: { en: 'dominant lineages', es: 'linajes dominantes' },
@@ -67,25 +75,29 @@ const S: Dict = {
   lineageWord: { en: 'lineage', es: 'linaje' },
   energyWord: { en: 'energy', es: 'energía' },
   speedWord: { en: 'speed', es: 'velocidad' },
+  neurons: { en: 'neurons', es: 'neuronas' },
   godMode: { en: 'god mode', es: 'modo dios' },
   reset: { en: 'reset', es: 'reiniciar' },
-  g_food: { en: 'food spawn', es: 'aparición comida' },
+  g_food: { en: 'food spawn', es: 'aparición de comida' },
   g_mutRate: { en: 'mutation rate', es: 'tasa de mutación' },
   g_mutSize: { en: 'mutation size', es: 'tamaño de mutación' },
   g_speed: { en: 'max speed', es: 'velocidad máx.' },
   g_agility: { en: 'agility', es: 'agilidad' },
   g_metabolism: { en: 'metabolism', es: 'metabolismo' },
   g_foodEnergy: { en: 'food energy', es: 'energía de comida' },
-  g_reproAt: { en: 'reproduce at', es: 'reproduce a' },
+  g_reproAt: { en: 'reproduce at', es: 'se reproduce a' },
   g_predation: { en: 'predation', es: 'depredación' },
+  g_predMargin: { en: 'predation margin', es: 'margen de depredación' },
+  g_offspring: { en: 'offspring energy', es: 'energía de la cría' },
+  g_moveCost: { en: 'move cost', es: 'coste de moverse' },
   obs_predation: { en: 'predation', es: 'depredación' },
   tr_aggr: { en: 'aggression', es: 'agresión' },
   loading: { en: 'summoning the ocean…', es: 'invocando el océano…' },
   desc_chase: { en: 'chases food head-on', es: 'persigue la comida de frente' },
-  desc_steer: { en: 'steers toward food (cautious)', es: 'gira hacia la comida (cauto)' },
+  desc_steer: { en: 'steers toward food (cautious)', es: 'gira hacia la comida (cauta)' },
   desc_straight: { en: 'fast straight-swimmer', es: 'nada recto y rápido' },
   desc_away: { en: 'turns away from food', es: 'se aleja de la comida' },
-  desc_erratic: { en: 'erratic / undirected', es: 'errático / sin rumbo' },
+  desc_erratic: { en: 'erratic / undirected', es: 'errática / sin rumbo' },
   desc_circler: { en: 'circles in place', es: 'gira en círculos' },
   desc_ambush: { en: 'lurks, then darts at food', es: 'acecha y embiste la comida' },
   desc_predator: { en: 'hunts other creatures', es: 'caza a otras criaturas' },
@@ -103,7 +115,14 @@ const S: Dict = {
       'right = decisions (turn, thrust). Cyan = positive, magenta = negative.<br>' +
       '• <b>Lineages</b>: descendants of a founder share a colour. The panel ranks the ' +
       'dominant ones and describes their evolved strategy.<br>' +
-      '• <b>God mode</b>: change the world (food, mutation…) and watch evolution respond.<br>' +
+      '• <b>Predation</b>: creatures hunt each other — a bigger one eats a smaller ' +
+      'neighbour on contact, so predator and prey lineages emerge.<br>' +
+      '• <b>Evolving brains</b>: each brain can switch hidden neurons on or off across ' +
+      'generations, so its complexity itself evolves.<br>' +
+      '• <b>God mode</b>: change the world (food, mutation, predation…) and watch ' +
+      'evolution respond.<br>' +
+      '• <b>Observatory</b> (📊): charts of the world over time, lineage histories, and ' +
+      'any creatures you track.<br>' +
       '• <b>Drag</b> to pan, <b>scroll</b> to zoom, <b>space</b> to pause.',
     es:
       '<b>PELAGIA</b> es un océano de vida artificial. Cada mota es una criatura con una ' +
@@ -116,8 +135,14 @@ const S: Dict = {
       'negativo.<br>' +
       '• <b>Linajes</b>: los descendientes de un fundador comparten color. El panel ordena ' +
       'los dominantes y describe su estrategia evolucionada.<br>' +
-      '• <b>Modo dios</b>: cambia el mundo (comida, mutación…) y mira cómo responde la ' +
-      'evolución.<br>' +
+      '• <b>Depredación</b>: las criaturas se cazan entre sí — la más grande se come a ' +
+      'una vecina más pequeña al contacto, así surgen linajes depredadores y presa.<br>' +
+      '• <b>Cerebros que evolucionan</b>: cada cerebro puede encender o apagar neuronas ' +
+      'ocultas entre generaciones, así que su complejidad también evoluciona.<br>' +
+      '• <b>Modo dios</b>: cambia el mundo (comida, mutación, depredación…) y mira cómo ' +
+      'responde la evolución.<br>' +
+      '• <b>Observatorio</b> (📊): gráficas del mundo en el tiempo, historia de los ' +
+      'linajes y las criaturas que sigas.<br>' +
       '• <b>Arrastra</b> para mover, <b>rueda</b> para zoom, <b>espacio</b> para pausar.',
   },
 };

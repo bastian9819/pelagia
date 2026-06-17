@@ -3,6 +3,7 @@ import {
   INPUT_SIZE,
   HIDDEN_SIZE,
   OUTPUT_SIZE,
+  WEIGHT_GENES,
   GENOME_SIZE,
   forward,
   randomGenome,
@@ -19,11 +20,13 @@ function scratch() {
 }
 
 describe('brain architecture', () => {
-  it('has the expected genome size', () => {
-    expect(GENOME_SIZE).toBe(
+  it('has the expected genome size (weights + one activation gene per hidden unit)', () => {
+    expect(WEIGHT_GENES).toBe(
       INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE,
     );
-    expect(GENOME_SIZE).toBe(112);
+    expect(WEIGHT_GENES).toBe(112);
+    expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE);
+    expect(GENOME_SIZE).toBe(122);
   });
 });
 
@@ -74,6 +77,29 @@ describe('forward', () => {
 
     forward(w, GENOME_SIZE, s.inputs, s.hidden, s.outputs);
     expect(s.outputs[0]).toBeCloseTo(Math.tanh(0.5), 6);
+  });
+
+  it('disables a hidden neuron when its activation gene is negative', () => {
+    const w = new Float32Array(GENOME_SIZE);
+    // Craft a single hidden0 -> output0 path.
+    w[0] = 0.5; // input0 -> hidden0
+    w[INPUT_SIZE] = 0.1; // hidden0 bias
+    const outBase = HIDDEN_SIZE * (INPUT_SIZE + 1);
+    w[outBase] = 0.8; // hidden0 -> output0
+    w[outBase + HIDDEN_SIZE] = -0.2; // output0 bias
+    const s = scratch();
+    s.inputs[0] = 1.0;
+
+    // Gene >= 0 (zero default): neuron active, output reflects the path.
+    forward(w, 0, s.inputs, s.hidden, s.outputs);
+    expect(s.hidden[0]!).toBeGreaterThan(0);
+    expect(s.outputs[0]).toBeCloseTo(Math.tanh(0.8 * Math.tanh(0.6) - 0.2), 6);
+
+    // Gene < 0: neuron disabled, only the output bias remains.
+    w[WEIGHT_GENES] = -1;
+    forward(w, 0, s.inputs, s.hidden, s.outputs);
+    expect(s.hidden[0]).toBe(0);
+    expect(s.outputs[0]).toBeCloseTo(Math.tanh(-0.2), 6);
   });
 
   it('keeps outputs in [-1, 1]', () => {

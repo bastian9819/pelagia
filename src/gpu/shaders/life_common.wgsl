@@ -8,7 +8,7 @@ struct Params {
   p3: vec4<f32>, // mutationRate, mutationStd, offspringFraction, _
   d0: vec4<u32>, // cols, rows, numCells, n
   d1: vec4<u32>, // f (food count), frame, selectedIndex, worldSeed
-  ext: vec4<f32>, // predationGain (0 disables), _, _, _  (Phase 6, appended)
+  ext: vec4<f32>, // predationGain (0 disables), predationMargin, _, _  (Phase 6)
 };
 
 // Group 0: creature + world state.
@@ -46,10 +46,10 @@ fn eatenIdx(i: u32) -> u32 { return P.d0.z * 2u + 3u + P.d1.x + i; } // + f + i
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
-const GENOME_SIZE: u32 = 112u;
+const WEIGHT_GENES: u32 = 112u; // weights+biases; activation genes follow (one per hidden)
+const GENOME_SIZE: u32 = 122u; // WEIGHT_GENES + HIDDEN_SIZE activation genes (Phase 6)
 const NONE: u32 = 0xffffffffu;
 const TAU: f32 = 6.2831853;
-const PREDATION_MARGIN: f32 = 1.25; // must be this much bigger (energy) to eat another
 
 fn pcg(v: u32) -> u32 {
   let s = v * 747796405u + 2891336453u;

@@ -5,7 +5,7 @@
  * decisions made this lineage dominate?". Foraging only — aggression/predation
  * arrives in Phase 6 (creatures can't eat each other yet).
  */
-import { forward, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE } from '../sim/brain.js';
+import { forward, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES } from '../sim/brain.js';
 import { t, onLang } from './i18n.js';
 
 const inp = new Float32Array(INPUT_SIZE);
@@ -48,6 +48,8 @@ export interface LineageTraits {
   turnBias: number;
   /** Phase 6: steer-toward-neighbour strength. >0 hunts, <0 flees others. */
   aggression: number;
+  /** Phase 6: how many hidden neurons this brain has switched on (0..HIDDEN_SIZE). */
+  neurons: number;
 }
 
 /**
@@ -68,6 +70,8 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
   const seek = (left.turn - right.turn) / 2; // >0 turns toward food
   const turnBias = (left.turn + right.turn) / 2; // same-way bias -> circling
   const aggression = (nbrLeft.turn - nbrRight.turn) / 2; // >0 turns toward neighbour
+  let neurons = 0;
+  for (let h = 0; h < HIDDEN_SIZE; h++) if (genome[WEIGHT_GENES + h]! >= 0) neurons++;
 
   let descKey: string;
   if (aggression > 0.35) descKey = 'desc_predator';
@@ -88,6 +92,7 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
     cruise,
     turnBias,
     aggression,
+    neurons,
   };
 }
 
@@ -104,6 +109,7 @@ export interface LineageRow {
   forage: number;
   cruise: number;
   aggression: number;
+  neurons: number;
 }
 
 export interface LineagePanel {
@@ -139,8 +145,8 @@ export function buildLineagePanel(): LineagePanel {
     const desc = `${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}`;
     const traits =
       `${t('tr_seek')} ${r.seek.toFixed(2)} · ` +
-      `${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
-      `${t('tr_aggr')} ${r.aggression.toFixed(2)}`;
+      `${t('tr_aggr')} ${r.aggression.toFixed(2)} · ` +
+      `${r.neurons}🧠`;
     return (
       `<div style="margin-bottom:9px;line-height:1.45">` +
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +

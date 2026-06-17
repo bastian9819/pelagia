@@ -28,8 +28,8 @@ export function buildGodPanel(
 ): GodPanel {
   const panel = document.createElement('div');
   panel.style.cssText =
-    'position:fixed;right:12px;bottom:72px;width:250px;display:none;padding:12px 14px;' +
-    'font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;' +
+    'position:fixed;right:12px;bottom:72px;width:250px;max-height:78vh;overflow:auto;display:none;' +
+    'padding:12px 14px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;' +
     'background:rgba(2,4,10,0.72);border:1px solid rgba(63,240,216,0.22);border-radius:10px;';
 
   const title = document.createElement('div');

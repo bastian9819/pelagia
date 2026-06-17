@@ -25,6 +25,8 @@ export interface WorldSample {
   energyMax: number;
   /** Predation kills in the last tick (Phase 6). */
   predKills: number;
+  /** Predation gain (0 = predation disabled) — drives the "active/off" wording. */
+  predGain: number;
   /** descKey -> count, sampled from the dominant pool (a strategy snapshot). */
   strategy: Record<string, number>;
 }
@@ -40,6 +42,7 @@ export interface LineageHistory {
   forage: number;
   cruise: number;
   aggression: number;
+  neurons: number;
   /** Population samples over time (oldest -> newest), for the rise/fall curve. */
   samples: number[];
 }
@@ -229,6 +232,33 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
     );
   }
 
+  // A plain-language read of what's happening right now, from the latest sample
+  // (population trend, predation, dominant strategy, mean brain complexity).
+  function narrative(world: WorldSample[], lineages: LineageHistory[]): string {
+    const cur = world[world.length - 1]!;
+    const prev = world[Math.max(0, world.length - 8)]!;
+    const d = cur.alive - prev.alive;
+    const band = Math.max(20, prev.alive * 0.08);
+    const trend = d > band ? t('nar_rising') : d < -band ? t('nar_falling') : t('nar_stable');
+    let wn = 0;
+    let wsum = 0;
+    for (const l of lineages) {
+      wn += l.neurons * l.count;
+      wsum += l.count;
+    }
+    const meanN = wsum ? (wn / wsum).toFixed(1) : '—';
+    const entries = Object.entries(cur.strategy).sort((a, b) => b[1] - a[1]);
+    const strat = entries.length ? t(entries[0]![0]) : '—';
+    const pred =
+      cur.predGain > 0
+        ? `${t('nar_predActive')}${cur.predKills > 0 ? ` (${cur.predKills}/tick)` : ''}`
+        : t('nar_predOff');
+    return (
+      `${t('nar_pop')} ${cur.alive.toLocaleString()} · ${trend}. ${pred}. ` +
+      `${t('nar_strategy')}: ${strat}. ${t('nar_complexity')} ${meanN} ${t('neurons')}.`
+    );
+  }
+
   function renderWorld(world: WorldSample[]): void {
     const body = worldCard.body;
     body.innerHTML = '';
@@ -237,6 +267,12 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       return;
     }
     const cur = world[world.length - 1]!;
+    const summary = document.createElement('div');
+    summary.style.cssText =
+      `margin-bottom:12px;padding:9px 11px;border-radius:8px;line-height:1.5;` +
+      `background:rgba(63,240,216,0.07);border:1px solid rgba(63,240,216,0.14);color:#cfe8ff;`;
+    summary.textContent = narrative(world, last.lineages);
+    body.append(summary);
     const tiles = document.createElement('div');
     tiles.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;';
     tiles.innerHTML =
@@ -342,7 +378,8 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
         `<div style="opacity:.7;margin-left:16px">${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}</div>` +
         `<div style="opacity:.5;margin-left:16px;font-size:11px">` +
         `${t('tr_seek')} ${r.seek.toFixed(2)} · ${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
-        `${t('tr_cruise')} ${r.cruise.toFixed(2)} · ${t('tr_aggr')} ${r.aggression.toFixed(2)}</div>`;
+        `${t('tr_cruise')} ${r.cruise.toFixed(2)} · ${t('tr_aggr')} ${r.aggression.toFixed(2)} · ` +
+        `${t('neurons')} ${r.neurons}/10</div>`;
       row.append(left, miniCurve(r.samples, c));
       table.append(row);
     }

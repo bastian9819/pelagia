@@ -8,7 +8,7 @@ import foodShader from './shaders/render_food.wgsl?raw';
 import fadeShader from './shaders/fade.wgsl?raw';
 import presentShader from './shaders/present.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
-import { GENOME_SIZE } from '../sim/brain.js';
+import { GENOME_SIZE, WEIGHT_GENES } from '../sim/brain.js';
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
@@ -104,8 +104,16 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       bioData[i * 4 + 2] = 1; // alive
       bioData[i * 4 + 3] = i; // lineage id (= founder slot; inherited unchanged)
     }
-    for (let i = 0; i < weightsData.length; i++) {
-      weightsData[i] = (rngWeights.nextFloat() * 2 - 1) * cfg.weightInitStd;
+    for (let i = 0; i < n; i++) {
+      const wb = i * GENOME_SIZE;
+      for (let k = 0; k < WEIGHT_GENES; k++) {
+        weightsData[wb + k] = (rngWeights.nextFloat() * 2 - 1) * cfg.weightInitStd;
+      }
+      // Activation genes biased active (uniform(-0.3, 1.0), ~77% on) so brains
+      // start capable; mutation then evolves how many neurons each lineage uses.
+      for (let k = WEIGHT_GENES; k < GENOME_SIZE; k++) {
+        weightsData[wb + k] = rngWeights.nextFloat() * 1.3 - 0.3;
+      }
     }
     for (let j = 0; j < f; j++) {
       if (j < foodInitAlive) {
@@ -190,10 +198,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pu[19] = n;
   pu[20] = f;
   pu[23] = seed >>> 0; // world seed: folded into the shader RNG (mutation/respawn)
-  // Predation gain (fraction of prey energy the predator gains; 0 disables it).
-  // god-mode slider; serialised in the share URL. Moderate default = food stays
+  // Predation gain (fraction of prey energy the predator gains; 0 disables it) and
+  // predation margin (how much bigger you must be to eat another, >= 1). Both are
+  // god-mode sliders, serialised in the share URL. Moderate defaults = food stays
   // the primary resource, predation a secondary pressure (anti-gray-soup, R-001).
   pf[24] = 0.5;
+  pf[25] = 1.25;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -613,7 +623,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
     { labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
     { labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1 },
+    { labelKey: 'g_offspring', idx: 14, min: 0.2, max: 0.8, step: 0.05 },
+    { labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },
     { labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
+    { labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the
@@ -721,6 +734,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     forage: number;
     cruise: number;
     aggression: number;
+    neurons: number;
   }
   const worldSeries: WorldSample[] = [];
   const lineageHist = new Map<number, LinTrack>();
@@ -754,6 +768,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         forage: tr.forage,
         cruise: tr.cruise,
         aggression: tr.aggression,
+        neurons: tr.neurons,
         samples: tr.samples,
       });
     }
@@ -839,6 +854,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
           forage: meta?.forage ?? 0,
           cruise: meta?.cruise ?? 0,
           aggression: meta?.aggression ?? 0,
+          neurons: meta?.neurons ?? 0,
         };
         lineageHist.set(lin, tr);
       }
@@ -853,6 +869,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         tr.forage = meta.forage;
         tr.cruise = meta.cruise;
         tr.aggression = meta.aggression;
+        tr.neurons = meta.neurons;
       }
       tr.samples.push(count);
       if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
@@ -989,6 +1006,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
             forage: ch.forage,
             cruise: ch.cruise,
             aggression: ch.aggression,
+            neurons: ch.neurons,
           });
         };
         for (let k = 0; k < dominantCount; k++) pushRow(k, 'dominant');
@@ -1017,6 +1035,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         energyMin: aliveCount ? minE : 0,
         energyMax: aliveCount ? maxE : 0,
         predKills: lastPredKills,
+        predGain: pf[24]!,
         strategy,
       });
       if (worldSeries.length > MAX_WORLD_SAMPLES) worldSeries.shift();

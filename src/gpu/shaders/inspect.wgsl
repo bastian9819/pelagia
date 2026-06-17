@@ -24,7 +24,8 @@ struct Params {
 const INPUT_SIZE: u32 = 8u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 2u;
-const GENOME_SIZE: u32 = 112u;
+const WEIGHT_GENES: u32 = 112u;
+const GENOME_SIZE: u32 = 122u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -123,7 +124,9 @@ fn main() {
   inp[7] = s.w / P.p0.w;
 
   var p = i * GENOME_SIZE;
+  let actBase = i * GENOME_SIZE + WEIGHT_GENES;
   var hidden: array<f32, HIDDEN_SIZE>;
+  var activeCount = 0.0;
   for (var h = 0u; h < HIDDEN_SIZE; h = h + 1u) {
     var sum = 0.0;
     for (var k = 0u; k < INPUT_SIZE; k = k + 1u) {
@@ -132,7 +135,9 @@ fn main() {
     }
     sum = sum + weights[p];
     p = p + 1u;
-    hidden[h] = tanh(sum);
+    let on = weights[actBase + h] >= 0.0;
+    hidden[h] = select(0.0, tanh(sum), on);
+    if (on) { activeCount = activeCount + 1.0; }
   }
   var outv: array<f32, OUTPUT_SIZE>;
   for (var o = 0u; o < OUTPUT_SIZE; o = o + 1u) {
@@ -159,4 +164,5 @@ fn main() {
   out[25] = b.y;
   out[26] = b.w;
   out[27] = b.z;
+  out[28] = activeCount; // Phase 6: how many hidden neurons are switched on
 }
