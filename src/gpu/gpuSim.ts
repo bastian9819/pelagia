@@ -12,6 +12,8 @@ import { GENOME_SIZE } from '../sim/brain.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
 import { buildUi } from './ui.js';
+import { buildBrainView } from './brainView.js';
+import inspectShader from './shaders/inspect.wgsl?raw';
 
 /**
  * Phase 2.0: the full evolving ecosystem on the GPU — grid build, sense, brain,
@@ -96,6 +98,13 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const cellStartBuf = device.createBuffer({ size: (numCells + 1) * 4, usage: S });
   const sortedBuf = device.createBuffer({ size: f * 4, usage: S });
   const freeListBuf = device.createBuffer({ size: n * 4, usage: S });
+  // Brain-inspector output (one selected creature): inputs|hidden|outputs|state.
+  const INSPECT_FLOATS = 32;
+  const inspectBuf = device.createBuffer({ size: INSPECT_FLOATS * 4, usage: S | CS });
+  const inspectReadback = device.createBuffer({
+    size: INSPECT_FLOATS * 4,
+    usage: GPUBufferUsage.MAP_READ | CD,
+  });
   device.queue.writeBuffer(stateBuf, 0, stateData);
   device.queue.writeBuffer(bioBuf, 0, bioData);
   device.queue.writeBuffer(weightsBuf, 0, weightsData);
@@ -198,6 +207,38 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const pDeath = mk(cycleModule, 'death');
   const pRepro = mk(cycleModule, 'repro');
   const pRespawn = mk(cycleModule, 'foodRespawn');
+
+  // Brain inspector: its own bind group (uniform + 6 read-only + 1 storage = 7).
+  const ro: GPUBufferBindingLayout = { type: 'read-only-storage' };
+  const bglInspect = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: u, buffer: { type: 'uniform' } },
+      { binding: 1, visibility: u, buffer: ro },
+      { binding: 2, visibility: u, buffer: ro },
+      { binding: 3, visibility: u, buffer: ro },
+      { binding: 4, visibility: u, buffer: ro },
+      { binding: 5, visibility: u, buffer: ro },
+      { binding: 6, visibility: u, buffer: ro },
+      { binding: 7, visibility: u, buffer: sto },
+    ],
+  });
+  const inspectPipeline = device.createComputePipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bglInspect] }),
+    compute: { module: device.createShaderModule({ code: inspectShader }), entryPoint: 'main' },
+  });
+  const inspectBind = device.createBindGroup({
+    layout: bglInspect,
+    entries: [
+      { binding: 0, resource: { buffer: paramsBuf } },
+      { binding: 1, resource: { buffer: stateBuf } },
+      { binding: 2, resource: { buffer: bioBuf } },
+      { binding: 3, resource: { buffer: weightsBuf } },
+      { binding: 4, resource: { buffer: foodBuf } },
+      { binding: 5, resource: { buffer: cellStartBuf } },
+      { binding: 6, resource: { buffer: sortedBuf } },
+      { binding: 7, resource: { buffer: inspectBuf } },
+    ],
+  });
 
   const wgN = Math.ceil(n / 256);
   const wgF = Math.ceil(f / 256);
@@ -367,16 +408,23 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { passive: false },
   );
   let dragging = false;
+  let dragMoved = false;
   let lastX = 0;
   let lastY = 0;
   canvas.addEventListener('pointerdown', (e) => {
     dragging = true;
+    dragMoved = false;
     lastX = e.clientX;
     lastY = e.clientY;
-    canvas.setPointerCapture(e.pointerId);
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore (e.g. synthetic events) */
+    }
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    if (Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY) > 4) dragMoved = true;
     const ppw = ppwNow();
     const dpr = canvas.width / window.innerWidth;
     cam.cx -= ((e.clientX - lastX) * dpr) / ppw;
@@ -386,8 +434,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     clampCam();
     updateView();
   });
-  canvas.addEventListener('pointerup', () => {
+  canvas.addEventListener('pointerup', (e) => {
     dragging = false;
+    if (!dragMoved) {
+      const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+      void selectNear(wx, wy);
+    }
   });
 
   resize();
@@ -402,6 +454,80 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   });
   document.body.appendChild(ui.panel);
   document.body.appendChild(ui.controls);
+
+  // --- Selection + brain inspector ---
+  let selectedIndex = -1;
+  let selecting = false;
+  let inspectPending = false;
+  const brainView = buildBrainView(() => deselect());
+  document.body.appendChild(brainView.panel);
+  const ring = document.createElement('div');
+  ring.style.cssText =
+    'position:fixed;display:none;border:2px solid rgba(63,240,216,0.9);border-radius:50%;' +
+    'box-shadow:0 0 12px rgba(63,240,216,0.6);pointer-events:none;transform:translate(-50%,-50%);z-index:5;';
+  document.body.appendChild(ring);
+
+  function setSelectedUniform(): void {
+    pu[22] = selectedIndex >= 0 ? selectedIndex : 0xffffffff;
+  }
+  function deselect(): void {
+    selectedIndex = -1;
+    setSelectedUniform();
+    brainView.hide();
+    ring.style.display = 'none';
+  }
+  function positionRing(d: Float32Array): void {
+    const ppw = ppwNow();
+    const dpr = canvas.width / window.innerWidth;
+    ring.style.left = `${((d[20]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
+    ring.style.top = `${((d[21]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
+    const px = Math.max(18, (renderData[4]! * ppw * 2) / dpr + 10);
+    ring.style.width = `${px}px`;
+    ring.style.height = `${px}px`;
+    ring.style.display = 'block';
+  }
+  async function selectNear(wx: number, wy: number): Promise<void> {
+    if (selecting) return;
+    selecting = true;
+    const sRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });
+    const bRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(stateBuf, 0, sRead, 0, n * 16);
+    enc.copyBufferToBuffer(bioBuf, 0, bRead, 0, n * 16);
+    device.queue.submit([enc.finish()]);
+    await Promise.all([sRead.mapAsync(GPUMapMode.READ), bRead.mapAsync(GPUMapMode.READ)]);
+    const st = new Float32Array(sRead.getMappedRange().slice(0));
+    const bi = new Float32Array(bRead.getMappedRange().slice(0));
+    sRead.unmap();
+    bRead.unmap();
+    sRead.destroy();
+    bRead.destroy();
+
+    const maxDist = 26 / ppwNow();
+    let best = -1;
+    let bestD2 = maxDist * maxDist;
+    for (let i = 0; i < n; i++) {
+      if (bi[i * 4 + 2]! < 0.5) continue;
+      const dx = st[i * 4]! - wx;
+      const dy = st[i * 4 + 1]! - wy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = i;
+      }
+    }
+    selecting = false;
+    if (best >= 0) {
+      selectedIndex = best;
+      setSelectedUniform();
+      brainView.show();
+    } else {
+      deselect();
+    }
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape') deselect();
+  });
 
   // Occasional non-blocking readback of the alive count (= n - freeCount).
   let alive = n;
@@ -574,6 +700,36 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     present.draw(3);
     present.end();
     device.queue.submit([encoder.finish()]);
+
+    // Brain inspector: recompute the selected creature's brain and read it back.
+    if (selectedIndex >= 0 && !inspectPending) {
+      setSelectedUniform();
+      writeParams(frame); // includes pu[22] = selectedIndex
+      const ienc = device.createCommandEncoder();
+      const ipass = ienc.beginComputePass();
+      ipass.setPipeline(inspectPipeline);
+      ipass.setBindGroup(0, inspectBind);
+      ipass.dispatchWorkgroups(1);
+      ipass.end();
+      ienc.copyBufferToBuffer(inspectBuf, 0, inspectReadback, 0, INSPECT_FLOATS * 4);
+      device.queue.submit([ienc.finish()]);
+      inspectPending = true;
+      void inspectReadback.mapAsync(GPUMapMode.READ).then(() => {
+        const d = new Float32Array(inspectReadback.getMappedRange().slice(0));
+        inspectReadback.unmap();
+        inspectPending = false;
+        if (selectedIndex < 0) return;
+        brainView.update(d);
+        if (d[27]! < 0.5) {
+          // The creature died: stop tracking but leave the panel on its last state.
+          ring.style.display = 'none';
+          selectedIndex = -1;
+          setSelectedUniform();
+        } else {
+          positionRing(d);
+        }
+      });
+    }
 
     frames++;
     const now = performance.now();

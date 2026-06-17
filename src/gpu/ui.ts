@@ -41,7 +41,7 @@ export function buildUi(onFit: () => void): OceanUi {
   fpsEl.style.cssText = 'opacity:.65;margin-top:8px;';
   const hint = document.createElement('div');
   hint.style.cssText = 'opacity:.45;font-size:11px;margin-top:10px;line-height:1.5;';
-  hint.innerHTML = 'arrastra para mover<br>rueda para zoom';
+  hint.innerHTML = 'arrastra para mover · rueda para zoom<br>clic en una criatura → su cerebro';
   panel.append(title, aliveEl, aliveLabel, spark, fpsEl, hint);
   const sctx = spark.getContext('2d')!;
 
