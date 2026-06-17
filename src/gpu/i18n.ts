@@ -69,6 +69,10 @@ const S: Dict = {
   out_turn: { en: 'turn', es: 'giro' },
   out_thrust: { en: 'thrust', es: 'empuje' },
   decision: { en: 'decision', es: 'decisión' },
+  bv_policy: { en: 'turn vs bearing', es: 'giro según rumbo' },
+  bv_food: { en: 'food', es: 'comida' },
+  bv_nbr: { en: 'neighbour', es: 'vecino' },
+  bv_listens: { en: 'neurons attend to', es: 'las neuronas atienden a' },
   turnRight: { en: 'right ▶', es: 'derecha ▶' },
   turnLeft: { en: '◀ left', es: '◀ izquierda' },
   straight: { en: '— straight', es: '— recto' },
@@ -92,6 +96,7 @@ const S: Dict = {
   g_predMargin: { en: 'predation margin', es: 'margen de depredación' },
   g_offspring: { en: 'offspring energy', es: 'energía de la cría' },
   g_moveCost: { en: 'move cost', es: 'coste de moverse' },
+  g_patchiness: { en: 'food patchiness', es: 'agrupación de comida' },
   obs_predation: { en: 'predation', es: 'depredación' },
   tr_aggr: { en: 'aggression', es: 'agresión' },
   loading: { en: 'summoning the ocean…', es: 'invocando el océano…' },
@@ -125,6 +130,8 @@ const S: Dict = {
       'evolution respond.<br>' +
       '• <b>Observatory</b> (📊): charts of the world over time, lineage histories, and ' +
       'any creatures you track.<br>' +
+      '• <b>🎨 Colour</b> the ocean by a trait (size, neurons, energy…) to watch evolution ' +
+      'sweep across it; <b>⏭ step</b> one tick and <b>0.1×</b> slow-mo to study a decision.<br>' +
       '• <b>Drag</b> to pan, <b>scroll</b> to zoom, <b>space</b> to pause.',
     es:
       '<b>PELAGIA</b> es un océano de vida artificial. Cada mota es una criatura con una ' +
@@ -145,6 +152,9 @@ const S: Dict = {
       'responde la evolución.<br>' +
       '• <b>Observatorio</b> (📊): gráficas del mundo en el tiempo, historia de los ' +
       'linajes y las criaturas que sigas.<br>' +
+      '• <b>🎨 Colorea</b> el océano por un rasgo (tamaño, neuronas, energía…) para ver la ' +
+      'evolución recorrerlo; <b>⏭ paso</b> a paso y cámara lenta <b>0.1×</b> para estudiar una ' +
+      'decisión.<br>' +
       '• <b>Arrastra</b> para mover, <b>rueda</b> para zoom, <b>espacio</b> para pausar.',
   },
 };

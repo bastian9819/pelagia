@@ -4,7 +4,8 @@
  */
 import { t, onLang, toggleLang, getLang } from './i18n.js';
 
-const SPEEDS = [0.25, 0.5, 1, 2, 4];
+const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4];
+const DEFAULT_SPEED_IDX = 3; // 1x
 
 export interface OceanUi {
   panel: HTMLElement;
@@ -25,9 +26,9 @@ export function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
   return b;
 }
 
-export function buildUi(onFit: () => void): OceanUi {
+export function buildUi(onFit: () => void, onStep: () => void): OceanUi {
   let paused = false;
-  let speedIdx = 2; // 1x
+  let speedIdx = DEFAULT_SPEED_IDX;
   const aliveHistory: number[] = [];
 
   const panel = document.createElement('div');
@@ -65,12 +66,20 @@ export function buildUi(onFit: () => void): OceanUi {
     paused = !paused;
     pauseBtn.textContent = paused ? '▶' : '⏸';
   });
-  const speedBtn = mkBtn('1×', () => {
+  const speedBtn = mkBtn(`${SPEEDS[speedIdx]!}×`, () => {
     speedIdx = (speedIdx + 1) % SPEEDS.length;
     speedBtn.textContent = `${SPEEDS[speedIdx]}×`;
   });
+  // Step: pause, then advance exactly one tick — for studying a decision frame.
+  const stepBtn = mkBtn('⏭', () => {
+    if (!paused) {
+      paused = true;
+      pauseBtn.textContent = '▶';
+    }
+    onStep();
+  });
   const langBtn = mkBtn(getLang().toUpperCase(), () => toggleLang());
-  controls.append(pauseBtn, speedBtn, mkBtn('⤢ fit', onFit), langBtn);
+  controls.append(pauseBtn, speedBtn, stepBtn, mkBtn('⤢ fit', onFit), langBtn);
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {

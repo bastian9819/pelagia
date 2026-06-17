@@ -6,11 +6,13 @@
  * [27] alive, [28] active hidden-neuron count, [29] body size.
  */
 import { t, onLang } from './i18n.js';
-import { HIDDEN_SIZE } from '../sim/brain.js';
+import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
 
 export interface BrainView {
   panel: HTMLElement;
   update(data: Float32Array): void;
+  /** Provide the selected creature's full genome (for the static policy view). */
+  setGenome(genome: Float32Array | null): void;
   show(): void;
   hide(): void;
 }
@@ -77,15 +79,105 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   canvas.style.cssText = `display:block;width:${W}px;height:${H}px;margin-top:8px;`;
   const cx = canvas.getContext('2d')!;
 
+  // Policy view: how this brain steers vs the bearing to food / a neighbour.
+  const PW = W;
+  const PH = 72;
+  const policyLabel = document.createElement('div');
+  policyLabel.style.cssText = 'margin-top:8px;font-size:10px;opacity:.7;';
+  const policy = document.createElement('canvas');
+  policy.width = PW;
+  policy.height = PH;
+  policy.style.cssText = `display:block;width:${PW}px;height:${PH}px;`;
+  const pcx = policy.getContext('2d')!;
+  const listens = document.createElement('div');
+  listens.style.cssText = 'margin-top:6px;font-size:11px;opacity:.75;';
+
   const stats = document.createElement('div');
   stats.style.cssText = 'margin-top:6px;line-height:1.6;';
-  panel.append(header, canvas, stats);
+  panel.append(header, canvas, policyLabel, policy, listens, stats);
+
+  // Selected creature's genome (static per creature) for the policy view.
+  let genome: Float32Array | null = null;
+  const sIn = new Float32Array(INPUT_SIZE);
+  const sHid = new Float32Array(HIDDEN_SIZE);
+  const sOut = new Float32Array(OUTPUT_SIZE);
+
+  function turnAt(food: boolean, bearing: number): number {
+    if (!genome) return 0;
+    sIn.fill(0);
+    sIn[food ? 0 : 3] = Math.cos(bearing);
+    sIn[food ? 1 : 4] = Math.sin(bearing);
+    sIn[food ? 2 : 5] = 0.8;
+    sIn[6] = 0.5;
+    sIn[7] = 0.4;
+    forward(genome, 0, sIn, sHid, sOut);
+    return sOut[0]!;
+  }
+
+  function drawPolicy(): void {
+    pcx.clearRect(0, 0, PW, PH);
+    pcx.strokeStyle = 'rgba(120,160,200,0.18)';
+    pcx.lineWidth = 1;
+    pcx.beginPath(); // zero-turn axis
+    pcx.moveTo(0, PH / 2);
+    pcx.lineTo(PW, PH / 2);
+    pcx.stroke();
+    if (!genome) return;
+    const N = 64;
+    const curve = (food: boolean, color: string): void => {
+      pcx.strokeStyle = color;
+      pcx.lineWidth = 1.6;
+      pcx.beginPath();
+      for (let s = 0; s < N; s++) {
+        const bearing = -Math.PI + (2 * Math.PI * s) / (N - 1);
+        const x = (s / (N - 1)) * PW;
+        const y = PH / 2 - turnAt(food, bearing) * (PH / 2 - 3);
+        if (s === 0) pcx.moveTo(x, y);
+        else pcx.lineTo(x, y);
+      }
+      pcx.stroke();
+    };
+    curve(true, '#3ff0d8'); // food response
+    curve(false, '#ff9f43'); // neighbour response
+  }
+
+  // Tally which sensor each ACTIVE hidden neuron weights most strongly.
+  function neuronSummary(): string {
+    if (!genome) return '';
+    const groups = [0, 0, 0, 0]; // food, neighbour, energy, speed
+    for (let h = 0; h < HIDDEN_SIZE; h++) {
+      if (genome[WEIGHT_GENES + h]! < 0) continue; // disabled
+      const base = h * (INPUT_SIZE + 1);
+      let bestI = 0;
+      let bestW = -1;
+      for (let i = 0; i < INPUT_SIZE; i++) {
+        const w = Math.abs(genome[base + i]!);
+        if (w > bestW) {
+          bestW = w;
+          bestI = i;
+        }
+      }
+      const g = bestI < 3 ? 0 : bestI < 6 ? 1 : bestI === 6 ? 2 : 3;
+      groups[g]!++;
+    }
+    const parts: string[] = [];
+    const labels = [t('bv_food'), t('bv_nbr'), t('energyWord'), t('speedWord')];
+    for (let g = 0; g < 4; g++) if (groups[g]! > 0) parts.push(`${labels[g]}×${groups[g]}`);
+    return `${t('bv_listens')}: ${parts.join(' · ')}`;
+  }
+
+  function refreshPolicy(): void {
+    policyLabel.textContent = `${t('bv_policy')} — ${t('bv_food')} ▬ · ${t('bv_nbr')} ▬`;
+    drawPolicy();
+    listens.textContent = neuronSummary();
+  }
 
   title.textContent = t('creatureBrain');
   track.textContent = '＋ ' + t('track');
   onLang(() => {
     title.textContent = t('creatureBrain');
     track.textContent = '＋ ' + t('track');
+    refreshPolicy();
   });
 
   const colY = (count: number, i: number, top: number, bottom: number): number =>
@@ -129,7 +221,19 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       cx.textAlign = 'right';
       cx.fillText(t(INPUT_KEYS[i]!), IN_X - 10, inPos[i]!.y);
     });
-    hidden.forEach((v, i) => node(hidPos[i]!.x, hidPos[i]!.y, v, 6));
+    hidden.forEach((v, i) => {
+      const disabled = genome ? genome[WEIGHT_GENES + i]! < 0 : false;
+      if (disabled) {
+        // Switched-off neuron: a hollow ring, so evolved complexity is visible.
+        cx.beginPath();
+        cx.arc(hidPos[i]!.x, hidPos[i]!.y, 5, 0, Math.PI * 2);
+        cx.strokeStyle = 'rgba(120,160,200,0.4)';
+        cx.lineWidth = 1;
+        cx.stroke();
+      } else {
+        node(hidPos[i]!.x, hidPos[i]!.y, v, 6);
+      }
+    });
     outputs.forEach((v, i) => {
       node(outPos[i]!.x, outPos[i]!.y, v, 8);
       cx.fillStyle = 'rgba(207,232,255,0.75)';
@@ -140,6 +244,10 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
 
   return {
     panel,
+    setGenome(g) {
+      genome = g;
+      refreshPolicy();
+    },
     show() {
       panel.style.display = 'block';
     },

@@ -207,6 +207,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // the primary resource, predation a secondary pressure (anti-gray-soup, R-001).
   pf[24] = 0.5;
   pf[25] = 1.25;
+  // Food patchiness (ext.z): 0 = uniform sprinkle, 1 = tight drifting blooms.
+  pf[26] = 0.6;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -521,14 +523,40 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   window.addEventListener('resize', resize);
 
   // --- Stats panel + controls ---
-  const ui = buildUi(() => {
-    cam.zoom = 1;
-    cam.cx = world / 2;
-    cam.cy = world / 2;
-    updateView();
-  });
+  const ui = buildUi(
+    () => {
+      cam.zoom = 1;
+      cam.cx = world / 2;
+      cam.cy = world / 2;
+      updateView();
+    },
+    () => {
+      // Step one tick (used while paused) so a single decision can be studied.
+      writeParams(frame);
+      const enc = device.createCommandEncoder();
+      recordSim(enc);
+      device.queue.submit([enc.finish()]);
+      frame++;
+    },
+  );
   document.body.appendChild(ui.panel);
   document.body.appendChild(ui.controls);
+
+  // --- Colour-by-trait: cycle how creatures are tinted (renderData[6]) ---
+  const COLOR_MODES = ['lineageWord', 'sizeWord', 'neurons', 'energyWord', 'speedWord'];
+  let colorMode = 0;
+  const colorBtn = mkBtn('', () => {
+    colorMode = (colorMode + 1) % COLOR_MODES.length;
+    renderData[6] = colorMode;
+    device.queue.writeBuffer(renderUbo, 0, renderData);
+    relabelColor();
+  });
+  function relabelColor(): void {
+    colorBtn.textContent = '🎨 ' + t(COLOR_MODES[colorMode]!);
+  }
+  relabelColor();
+  onLang(relabelColor);
+  ui.controls.appendChild(colorBtn);
 
   // --- Selection + brain inspector ---
   let selectedIndex = -1;
@@ -556,7 +584,23 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     selectedLineage = -1;
     setSelectedUniform();
     brainView.hide();
+    brainView.setGenome(null);
     ring.style.display = 'none';
+  }
+  // Read one creature's genome back (static per creature) for the policy view.
+  async function loadGenome(index: number, lineage: number): Promise<void> {
+    const gRead = device.createBuffer({
+      size: GENOME_SIZE * 4,
+      usage: GPUBufferUsage.MAP_READ | CD,
+    });
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(weightsBuf, index * GENOME_SIZE * 4, gRead, 0, GENOME_SIZE * 4);
+    device.queue.submit([enc.finish()]);
+    await gRead.mapAsync(GPUMapMode.READ);
+    const g = new Float32Array(gRead.getMappedRange().slice(0));
+    gRead.unmap();
+    gRead.destroy();
+    if (selectedIndex === index && selectedLineage === lineage) brainView.setGenome(g);
   }
   function positionRing(d: Float32Array): void {
     const ppw = ppwNow();
@@ -604,6 +648,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       selectedLineage = Math.round(bi[best * 4 + 3]!);
       setSelectedUniform();
       brainView.show();
+      void loadGenome(best, selectedLineage);
     } else {
       deselect();
     }
@@ -631,6 +676,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },
     { labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
     { labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
+    { labelKey: 'g_patchiness', idx: 26, min: 0, max: 1, step: 0.05 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the

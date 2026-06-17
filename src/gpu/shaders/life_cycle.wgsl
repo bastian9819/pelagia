@@ -29,7 +29,10 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (i >= P.d0.w) { return; }
   var b = bio[i];
   if (b.z < 0.5) { return; }
-  if (b.x < P.p2.z) { return; } // reproThreshold
+  // Bigger bodies need proportionally more energy to reproduce, so small bodies
+  // out-breed big ones — a fecundity counterweight to predation's size advantage,
+  // which keeps size from running away and lets small/large niches coexist.
+  if (b.x < P.p2.z * creatureSize(i)) { return; } // reproThreshold * size
 
   var slot = NONE;
   loop {
@@ -86,5 +89,16 @@ fn foodRespawn(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (r.exchanged) { break; }
   }
   let frame = P.d1.y;
-  foodPos[j] = vec2<f32>(rnd(j + 17u, frame) * P.p0.x, rnd(j + 83u, frame) * P.p0.y);
+  // Patchy food: each pellet belongs to one of a few slowly-drifting blooms, so
+  // food clusters into moving hotspots instead of a uniform sprinkle -> spatial
+  // foraging, migration. patch (P.ext.z) interpolates uniform (0) -> tight (1).
+  let K = 5u;
+  let bk = pcg(j) % K;
+  let ang = f32(bk) * 1.2566371 + f32(frame) * 0.0008;
+  let cx = P.p0.x * (0.5 + 0.32 * cos(ang));
+  let cy = P.p0.y * (0.5 + 0.32 * sin(ang * 1.3 + f32(bk)));
+  let spread = mix(P.p0.x * 0.5, P.p0.x * 0.04, clamp(P.ext.z, 0.0, 1.0));
+  let fx = cx + (rnd(j + 17u, frame) - 0.5) * 2.0 * spread;
+  let fy = cy + (rnd(j + 83u, frame) - 0.5) * 2.0 * spread;
+  foodPos[j] = vec2<f32>(wrapf(fx, P.p0.x), wrapf(fy, P.p0.y));
 }
