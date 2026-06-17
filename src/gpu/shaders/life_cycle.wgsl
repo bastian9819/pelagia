@@ -2,15 +2,19 @@
 // Run as separate dispatches in this order within one compute pass; WebGPU
 // synchronises storage writes between dispatches, so repro sees death's frees.
 
-// Death: alive creatures out of energy free their slot onto the stack.
+// Death: alive creatures out of energy — or eaten by a predator this tick — free
+// their slot onto the stack. (Predation claims are made atomically in the sim
+// pass; the predator already credited its own energy there.)
 @compute @workgroup_size(256)
 fn death(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x;
   if (i >= P.d0.w) { return; }
   var b = bio[i];
   if (b.z < 0.5) { return; } // already free
-  if (b.x <= 0.0) {
+  let eaten = atomicLoad(&gridData[eatenIdx(i)]) != 0u;
+  if (b.x <= 0.0 || eaten) {
     b.z = 0.0;
+    b.x = 0.0;
     bio[i] = b;
     let slot = atomicAdd(&gridData[freeCountIdx()], 1u);
     freeList[slot] = i;

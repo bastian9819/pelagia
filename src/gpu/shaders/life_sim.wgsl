@@ -1,5 +1,6 @@
-// Per-creature step: sense nearest food via the grid -> brain -> move ->
-// eat (atomic claim) -> metabolise. Only alive creatures act.
+// Per-creature step: sense nearest food + nearest neighbour via the grids ->
+// brain -> move -> eat food (atomic claim) -> prey on a smaller neighbour
+// (atomic claim) -> metabolise. Only alive creatures act.
 
 const INPUT_SIZE: u32 = 8u;
 const HIDDEN_SIZE: u32 = 10u;
@@ -19,11 +20,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let cols = i32(P.d0.x);
   let rows = i32(P.d0.y);
 
-  // Nearest food across the 3x3 cell block (cellSize == perception radius).
   let bcx = i32(floor(s.x / cs));
   let bcy = i32(floor(s.y / cs));
+
+  // Nearest food across the 3x3 cell block (cellSize == perception radius).
   var bestD2 = 1.0e30;
   var bestIdx = NONE;
+  // Nearest OTHER creature across the same 3x3 block (creature grid).
+  var nbrD2 = 1.0e30;
+  var nbrIdx = NONE;
   for (var dy = -1; dy <= 1; dy = dy + 1) {
     var cy = (bcy + dy) % rows;
     if (cy < 0) { cy = cy + rows; }
@@ -31,9 +36,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       var cx = (bcx + dx) % cols;
       if (cx < 0) { cx = cx + cols; }
       let cell = u32(cy) * P.d0.x + u32(cx);
-      let start = cellStart[cell];
-      let end = cellStart[cell + 1u];
-      for (var k = start; k < end; k = k + 1u) {
+      // food in this cell
+      let fstart = cellStart[cell];
+      let fend = cellStart[cell + 1u];
+      for (var k = fstart; k < fend; k = k + 1u) {
         let fj = sortedIdx[k];
         let fp = foodPos[fj];
         let ddx = wrapDelta(fp.x - s.x, W);
@@ -42,6 +48,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (d2 < bestD2) {
           bestD2 = d2;
           bestIdx = fj;
+        }
+      }
+      // creatures in this cell
+      let cstart = cellStart[creatureStartBase() + cell];
+      let cend = cellStart[creatureStartBase() + cell + 1u];
+      for (var k = cstart; k < cend; k = k + 1u) {
+        let nj = sortedIdx[creatureSortBase() + k];
+        if (nj == i) { continue; } // skip self
+        let np = state[nj];
+        let ddx = wrapDelta(np.x - s.x, W);
+        let ddy = wrapDelta(np.y - s.y, H);
+        let d2 = ddx * ddx + ddy * ddy;
+        if (d2 < nbrD2) {
+          nbrD2 = d2;
+          nbrIdx = nj;
         }
       }
     }
@@ -61,9 +82,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     inp[1] = 0.0;
     inp[2] = 0.0;
   }
-  inp[3] = 0.0;
-  inp[4] = 0.0;
-  inp[5] = 0.0;
+  if (nbrIdx != NONE && nbrD2 <= cs * cs) {
+    let np = state[nbrIdx];
+    let ndx = wrapDelta(np.x - s.x, W);
+    let ndy = wrapDelta(np.y - s.y, H);
+    let nrel = atan2(ndy, ndx) - s.z;
+    inp[3] = cos(nrel);
+    inp[4] = sin(nrel);
+    inp[5] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
+  } else {
+    inp[3] = 0.0;
+    inp[4] = 0.0;
+    inp[5] = 0.0;
+  }
   inp[6] = b.x / P.p2.z; // energy / reproThreshold
   inp[7] = s.w / P.p0.w; // speed / maxSpeed
 
@@ -99,9 +130,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let ny = wrapf(s.y + sin(heading) * speed * P.p1.y, H);
   state[i] = vec4<f32>(nx, ny, heading, speed);
 
-  // Eat: claim the nearest food if it is within eat radius (one winner).
   var energy = b.x;
   let eatR = P.p1.z;
+
+  // Eat: claim the nearest food if it is within eat radius (one winner).
   if (bestIdx != NONE) {
     let fp = foodPos[bestIdx];
     let ddx = wrapDelta(fp.x - nx, W);
@@ -111,6 +143,27 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       if (prev == 0u) {
         energy = energy + P.p1.w; // foodEnergy
         foodPos[bestIdx] = vec2<f32>(-1.0, -1.0); // mark eaten (rate-limited respawn)
+      }
+    }
+  }
+
+  // Prey on the nearest neighbour if we're enough bigger and in contact. The
+  // energy margin makes mutual predation impossible (can't both be 1.25x bigger),
+  // so a single atomic claim per prey is enough; the predator credits ITS OWN
+  // energy here and the prey is freed in the death pass (race-free).
+  let gain = P.ext.x;
+  if (gain > 0.0 && nbrIdx != NONE) {
+    let np = state[nbrIdx];
+    let pdx = wrapDelta(np.x - nx, W);
+    let pdy = wrapDelta(np.y - ny, H);
+    if (pdx * pdx + pdy * pdy <= eatR * eatR) {
+      let preyE = bio[nbrIdx].x;
+      if (energy > preyE * PREDATION_MARGIN) {
+        let claim = atomicCompareExchangeWeak(&gridData[eatenIdx(nbrIdx)], 0u, i + 1u);
+        if (claim.exchanged) {
+          energy = energy + gain * max(0.0, preyE);
+          atomicAdd(&gridData[predCountIdx()], 1u);
+        }
       }
     }
   }

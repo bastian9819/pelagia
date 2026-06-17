@@ -48,8 +48,12 @@ fn main() {
 
   let bcx = i32(floor(s.x / cs));
   let bcy = i32(floor(s.y / cs));
+  let nc = P.d0.z;
+  let f = P.d1.x;
   var bestD2 = 1.0e30;
   var bestIdx = NONE;
+  var nbrD2 = 1.0e30;
+  var nbrIdx = NONE;
   for (var dy = -1; dy <= 1; dy = dy + 1) {
     var cy = (bcy + dy) % rows;
     if (cy < 0) { cy = cy + rows; }
@@ -70,6 +74,21 @@ fn main() {
           bestIdx = fj;
         }
       }
+      // creature region: cellStart[nc+1+cell], sortedIdx[f + k]
+      let cstart = cellStart[nc + 1u + cell];
+      let cend = cellStart[nc + 1u + cell + 1u];
+      for (var k = cstart; k < cend; k = k + 1u) {
+        let nj = sortedIdx[f + k];
+        if (nj == i) { continue; }
+        let np = state[nj];
+        let ddx = wrapDelta(np.x - s.x, W);
+        let ddy = wrapDelta(np.y - s.y, H);
+        let d2 = ddx * ddx + ddy * ddy;
+        if (d2 < nbrD2) {
+          nbrD2 = d2;
+          nbrIdx = nj;
+        }
+      }
     }
   }
 
@@ -87,9 +106,19 @@ fn main() {
     inp[1] = 0.0;
     inp[2] = 0.0;
   }
-  inp[3] = 0.0;
-  inp[4] = 0.0;
-  inp[5] = 0.0;
+  if (nbrIdx != NONE && nbrD2 <= cs * cs) {
+    let np = state[nbrIdx];
+    let ndx = wrapDelta(np.x - s.x, W);
+    let ndy = wrapDelta(np.y - s.y, H);
+    let nrel = atan2(ndy, ndx) - s.z;
+    inp[3] = cos(nrel);
+    inp[4] = sin(nrel);
+    inp[5] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
+  } else {
+    inp[3] = 0.0;
+    inp[4] = 0.0;
+    inp[5] = 0.0;
+  }
   inp[6] = b.x / P.p2.z;
   inp[7] = s.w / P.p0.w;
 

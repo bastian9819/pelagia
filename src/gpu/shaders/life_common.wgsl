@@ -8,6 +8,7 @@ struct Params {
   p3: vec4<f32>, // mutationRate, mutationStd, offspringFraction, _
   d0: vec4<u32>, // cols, rows, numCells, n
   d1: vec4<u32>, // f (food count), frame, selectedIndex, worldSeed
+  ext: vec4<f32>, // predationGain (0 disables), _, _, _  (Phase 6, appended)
 };
 
 // Group 0: creature + world state.
@@ -18,24 +19,37 @@ struct Params {
 @group(0) @binding(4) var<storage, read_write> foodPos: array<vec2<f32>>;
 
 // Group 1: grid + lifecycle scratch. To fit maxStorageBuffersPerShaderStage (8),
-// the per-cell counts (reused as the scatter cursor), the lifecycle counters and
-// the per-food eat-claims are packed into one atomic buffer `gridData`:
-//   [0, numCells)              -> per-cell count, then reused as scatter cursor
-//   [numCells]                 -> freeCount (free-slot stack size; persists)
-//   [numCells + 1]             -> food spawn budget for this tick
-//   [numCells + 2, +f)         -> per-food eat claim (1 = taken this tick)
+// everything is packed into the same four buffers; Phase 6 adds a SECOND grid
+// over creatures (for neighbour perception + predation) into the SAME buffers so
+// no new bindings are needed. Layout of the atomic buffer `gridData`
+// (nc = numCells, f = food slots, n = creature slots):
+//   [0,    nc)        -> food per-cell count, then reused as scatter cursor
+//   [nc,  2nc)        -> creature per-cell count, then reused as scatter cursor
+//   [2nc]             -> freeCount (free-slot stack size; persists)
+//   [2nc + 1]         -> food spawn budget for this tick
+//   [2nc + 2]         -> predation kills this tick (stat; reset each tick)
+//   [2nc + 3, +f)     -> per-food eat claim (1 = taken this tick)
+//   [2nc+3+f, +n)     -> per-creature predation claim (predatorIndex+1; 0 = none)
+// cellStart holds TWO regions of offsets: food [0, nc] then creatures [nc+1, 2nc+1].
+// sortedIdx holds food indices [0, f) then creature indices [f, f+n).
 @group(1) @binding(0) var<storage, read_write> gridData: array<atomic<u32>>;
-@group(1) @binding(1) var<storage, read_write> cellStart: array<u32>; // offsets, numCells+1
-@group(1) @binding(2) var<storage, read_write> sortedIdx: array<u32>; // food indices by cell
+@group(1) @binding(1) var<storage, read_write> cellStart: array<u32>; // 2*(numCells+1)
+@group(1) @binding(2) var<storage, read_write> sortedIdx: array<u32>; // food then creatures
 @group(1) @binding(3) var<storage, read_write> freeList: array<u32>;  // free slot indices
 
-fn freeCountIdx() -> u32 { return P.d0.z; }
-fn budgetIdx() -> u32 { return P.d0.z + 1u; }
-fn claimIdx(j: u32) -> u32 { return P.d0.z + 2u + j; }
+fn creatureCountIdx(cell: u32) -> u32 { return P.d0.z + cell; } // [numCells, 2numCells)
+fn freeCountIdx() -> u32 { return P.d0.z * 2u; }
+fn budgetIdx() -> u32 { return P.d0.z * 2u + 1u; }
+fn predCountIdx() -> u32 { return P.d0.z * 2u + 2u; }
+fn claimIdx(j: u32) -> u32 { return P.d0.z * 2u + 3u + j; }
+fn eatenIdx(i: u32) -> u32 { return P.d0.z * 2u + 3u + P.d1.x + i; } // + f + i
+fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
+fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
 const GENOME_SIZE: u32 = 112u;
 const NONE: u32 = 0xffffffffu;
 const TAU: f32 = 6.2831853;
+const PREDATION_MARGIN: f32 = 1.25; // must be this much bigger (energy) to eat another
 
 fn pcg(v: u32) -> u32 {
   let s = v * 747796405u + 2891336453u;

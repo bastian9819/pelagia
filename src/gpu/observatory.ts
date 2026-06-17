@@ -23,6 +23,8 @@ export interface WorldSample {
   energyAvg: number;
   energyMin: number;
   energyMax: number;
+  /** Predation kills in the last tick (Phase 6). */
+  predKills: number;
   /** descKey -> count, sampled from the dominant pool (a strategy snapshot). */
   strategy: Record<string, number>;
 }
@@ -37,6 +39,7 @@ export interface LineageHistory {
   seek: number;
   forage: number;
   cruise: number;
+  aggression: number;
   /** Population samples over time (oldest -> newest), for the rise/fall curve. */
   samples: number[];
 }
@@ -240,7 +243,8 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       tile(t('obs_alive'), cur.alive.toLocaleString(), ACCENT) +
       tile(t('obs_food'), cur.foodAlive.toLocaleString()) +
       tile(t('obs_diversity'), cur.lineages.toLocaleString()) +
-      tile(t('obs_meanEnergy'), cur.energyAvg.toFixed(1));
+      tile(t('obs_meanEnergy'), cur.energyAvg.toFixed(1)) +
+      tile(t('obs_predation'), `${cur.predKills}/tick`, '#ff9f43');
     body.append(tiles);
 
     const charts = document.createElement('div');
@@ -337,7 +341,8 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
         `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span></div>` +
         `<div style="opacity:.7;margin-left:16px">${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}</div>` +
         `<div style="opacity:.5;margin-left:16px;font-size:11px">` +
-        `${t('tr_seek')} ${r.seek.toFixed(2)} · ${t('tr_forage')} ${r.forage.toFixed(2)} · ${t('tr_cruise')} ${r.cruise.toFixed(2)}</div>`;
+        `${t('tr_seek')} ${r.seek.toFixed(2)} · ${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
+        `${t('tr_cruise')} ${r.cruise.toFixed(2)} · ${t('tr_aggr')} ${r.aggression.toFixed(2)}</div>`;
       row.append(left, miniCurve(r.samples, c));
       table.append(row);
     }

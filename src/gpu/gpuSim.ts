@@ -127,11 +127,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const bioBuf = device.createBuffer({ size: bioData.byteLength, usage: S | CD | CS });
   const weightsBuf = device.createBuffer({ size: weightsData.byteLength, usage: S | CD | CS });
   const foodBuf = device.createBuffer({ size: foodData.byteLength, usage: S | CD | CS });
-  // Packed atomic buffer: [cell counts/cursor | freeCount | budget | claims].
-  // COPY_DST so restart can reset the persistent freeCount slot in place.
-  const gridDataBuf = device.createBuffer({ size: (numCells + 2 + f) * 4, usage: S | CS | CD });
-  const cellStartBuf = device.createBuffer({ size: (numCells + 1) * 4, usage: S });
-  const sortedBuf = device.createBuffer({ size: f * 4, usage: S });
+  // Phase 6: gridData / cellStart / sortedIdx hold BOTH the food grid and a
+  // second CREATURE grid (neighbour perception + predation), packed into the same
+  // buffers to stay under the 8-storage-buffer limit (see life_common.wgsl).
+  // gridData also carries freeCount, food budget, the predation counter, food
+  // claims and per-creature predation claims. COPY_DST so restart can reset
+  // freeCount in place.
+  const gridDataBuf = device.createBuffer({
+    size: (2 * numCells + 3 + f + n) * 4,
+    usage: S | CS | CD,
+  });
+  const cellStartBuf = device.createBuffer({ size: 2 * (numCells + 1) * 4, usage: S });
+  const sortedBuf = device.createBuffer({ size: (f + n) * 4, usage: S });
   const freeListBuf = device.createBuffer({ size: n * 4, usage: S });
   // Brain-inspector output (one selected creature): inputs|hidden|outputs|state.
   const INSPECT_FLOATS = 32;
@@ -151,9 +158,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   device.queue.writeBuffer(weightsBuf, 0, weightsData);
   device.queue.writeBuffer(foodBuf, 0, foodData);
 
-  // --- Params uniform (96 bytes: 4 vec4<f32> + 2 vec4<u32>) ---
-  const paramsBuf = device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | CD });
-  const pbuf = new ArrayBuffer(96);
+  // --- Params uniform (112 bytes: 5 vec4<f32> + 2 vec4<u32>) ---
+  // Phase 6 appended a 5th f32 vec4 `ext` AFTER d0/d1, so existing indices are
+  // unchanged: d0 = pu[16..19], d1 = pu[20..23], ext = pf[24..27].
+  const paramsBuf = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | CD });
+  const pbuf = new ArrayBuffer(112);
   const pf = new Float32Array(pbuf);
   const pu = new Uint32Array(pbuf);
   pf[0] = world;
@@ -181,6 +190,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pu[19] = n;
   pu[20] = f;
   pu[23] = seed >>> 0; // world seed: folded into the shader RNG (mutation/respawn)
+  // Predation gain (fraction of prey energy the predator gains; 0 disables it).
+  // god-mode slider; serialised in the share URL. Moderate default = food stays
+  // the primary resource, predation a secondary pressure (anti-gray-soup, R-001).
+  pf[24] = 0.5;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -243,8 +256,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const pGridClear = mk(gridModule, 'gridClear');
   const pClaimClear = mk(gridModule, 'claimClear');
   const pCount = mk(gridModule, 'count');
+  const pCountCreatures = mk(gridModule, 'countCreatures');
   const pScan = mk(gridModule, 'scan');
   const pScatter = mk(gridModule, 'scatter');
+  const pScatterCreatures = mk(gridModule, 'scatterCreatures');
   const pSim = mk(simModule, 'main');
   const pDeath = mk(cycleModule, 'death');
   const pRepro = mk(cycleModule, 'repro');
@@ -284,21 +299,25 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   const wgN = Math.ceil(n / 256);
   const wgF = Math.ceil(f / 256);
-  const wgC = Math.ceil(numCells / 256);
+  const wgC2 = Math.ceil((2 * numCells) / 256); // clear both grids' cell counts
   function recordSim(encoder: GPUCommandEncoder): void {
     const pass = encoder.beginComputePass();
     pass.setBindGroup(0, group0);
     pass.setBindGroup(1, group1);
     pass.setPipeline(pGridClear);
-    pass.dispatchWorkgroups(wgC);
+    pass.dispatchWorkgroups(wgC2);
     pass.setPipeline(pClaimClear);
     pass.dispatchWorkgroups(wgF);
     pass.setPipeline(pCount);
     pass.dispatchWorkgroups(wgF);
+    pass.setPipeline(pCountCreatures);
+    pass.dispatchWorkgroups(wgN);
     pass.setPipeline(pScan);
     pass.dispatchWorkgroups(1);
     pass.setPipeline(pScatter);
     pass.dispatchWorkgroups(wgF);
+    pass.setPipeline(pScatterCreatures);
+    pass.dispatchWorkgroups(wgN);
     pass.setPipeline(pSim);
     pass.dispatchWorkgroups(wgN);
     pass.setPipeline(pDeath);
@@ -594,6 +613,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
     { labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
     { labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1 },
+    { labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the
@@ -700,6 +720,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     seek: number;
     forage: number;
     cruise: number;
+    aggression: number;
   }
   const worldSeries: WorldSample[] = [];
   const lineageHist = new Map<number, LinTrack>();
@@ -732,6 +753,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         seek: tr.seek,
         forage: tr.forage,
         cruise: tr.cruise,
+        aggression: tr.aggression,
         samples: tr.samples,
       });
     }
@@ -816,6 +838,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
           seek: meta?.seek ?? 0,
           forage: meta?.forage ?? 0,
           cruise: meta?.cruise ?? 0,
+          aggression: meta?.aggression ?? 0,
         };
         lineageHist.set(lin, tr);
       }
@@ -829,6 +852,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         tr.seek = meta.seek;
         tr.forage = meta.forage;
         tr.cruise = meta.cruise;
+        tr.aggression = meta.aggression;
       }
       tr.samples.push(count);
       if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
@@ -964,6 +988,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
             seek: ch.seek,
             forage: ch.forage,
             cruise: ch.cruise,
+            aggression: ch.aggression,
           });
         };
         for (let k = 0; k < dominantCount; k++) pushRow(k, 'dominant');
@@ -991,6 +1016,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         energyAvg: aliveCount ? sumE / aliveCount : 0,
         energyMin: aliveCount ? minE : 0,
         energyMax: aliveCount ? maxE : 0,
+        predKills: lastPredKills,
         strategy,
       });
       if (worldSeries.length > MAX_WORLD_SAMPLES) worldSeries.shift();
@@ -1001,8 +1027,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     }
   }
 
-  // Occasional non-blocking readback of the alive count (= n - freeCount).
+  // Occasional non-blocking readback of the alive count (= n - freeCount) and the
+  // per-tick predation kill count (gridData[2*numCells .. +3] = free, budget, pred).
   let alive = n;
+  let lastPredKills = 0;
   let countersPending = false;
   const countersReadback = device.createBuffer({
     size: 16,
@@ -1012,11 +1040,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     if (countersPending) return;
     countersPending = true;
     const enc = device.createCommandEncoder();
-    enc.copyBufferToBuffer(gridDataBuf, numCells * 4, countersReadback, 0, 4);
+    enc.copyBufferToBuffer(gridDataBuf, 2 * numCells * 4, countersReadback, 0, 12);
     device.queue.submit([enc.finish()]);
     void countersReadback.mapAsync(GPUMapMode.READ).then(() => {
-      const free = new Uint32Array(countersReadback.getMappedRange())[0]!;
-      alive = n - free;
+      const c = new Uint32Array(countersReadback.getMappedRange());
+      alive = n - c[0]!;
+      lastPredKills = c[2]!;
       countersReadback.unmap();
       countersPending = false;
     });
@@ -1127,7 +1156,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     device.queue.writeBuffer(bioBuf, 0, bioData);
     device.queue.writeBuffer(weightsBuf, 0, weightsData);
     device.queue.writeBuffer(foodBuf, 0, foodData);
-    device.queue.writeBuffer(gridDataBuf, numCells * 4, new Uint32Array([0])); // freeCount = 0
+    device.queue.writeBuffer(gridDataBuf, 2 * numCells * 4, new Uint32Array([0])); // freeCount = 0
     frame = 0;
     stepAcc = 0;
     alive = n;

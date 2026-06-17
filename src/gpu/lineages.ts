@@ -17,11 +17,17 @@ function probe(
   foodCos: number,
   foodSin: number,
   foodProx: number,
+  nbrCos = 0,
+  nbrSin = 0,
+  nbrProx = 0,
 ): { turn: number; thrust: number } {
   inp.fill(0);
   inp[0] = foodCos;
   inp[1] = foodSin;
   inp[2] = foodProx;
+  inp[3] = nbrCos;
+  inp[4] = nbrSin;
+  inp[5] = nbrProx;
   inp[6] = 0.5;
   inp[7] = 0.4;
   forward(genome, 0, inp, hid, out);
@@ -40,25 +46,33 @@ export interface LineageTraits {
   cruise: number;
   /** Handedness: a persistent same-way turn (circling) when |·| is large. */
   turnBias: number;
+  /** Phase 6: steer-toward-neighbour strength. >0 hunts, <0 flees others. */
+  aggression: number;
 }
 
 /**
  * Characterise a genome by probing its policy with canonical stimuli. Returns
  * continuous traits (so even near-converged lineages read differently) plus a
- * headline label for a quick gist.
+ * headline label for a quick gist. Phase 6 also probes the neighbour sensors to
+ * read aggression (does the brain steer toward another creature?).
  */
 export function characterizeGenome(genome: Float32Array): LineageTraits {
   const ahead = probe(genome, 1, 0, 0.8);
   const left = probe(genome, 0, 1, 0.8);
   const right = probe(genome, 0, -1, 0.8);
   const none = probe(genome, 0, 0, 0);
+  const nbrLeft = probe(genome, 0, 0, 0, 0, 1, 0.8);
+  const nbrRight = probe(genome, 0, 0, 0, 0, -1, 0.8);
   const forage = ahead.thrust;
   const cruise = none.thrust;
   const seek = (left.turn - right.turn) / 2; // >0 turns toward food
   const turnBias = (left.turn + right.turn) / 2; // same-way bias -> circling
+  const aggression = (nbrLeft.turn - nbrRight.turn) / 2; // >0 turns toward neighbour
 
   let descKey: string;
-  if (Math.abs(turnBias) > 0.35 && seek < 0.2) descKey = 'desc_circler';
+  if (aggression > 0.35) descKey = 'desc_predator';
+  else if (aggression < -0.35) descKey = 'desc_skittish';
+  else if (Math.abs(turnBias) > 0.35 && seek < 0.2) descKey = 'desc_circler';
   else if (seek > 0.25 && forage > 0.45) descKey = 'desc_chase';
   else if (seek > 0.25) descKey = 'desc_steer';
   else if (cruise < 0.3 && forage > 0.5) descKey = 'desc_ambush';
@@ -66,7 +80,15 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
   else if (seek < -0.2) descKey = 'desc_away';
   else descKey = 'desc_erratic';
 
-  return { descKey, fast: (forage + cruise) / 2 > 0.55, seek, forage, cruise, turnBias };
+  return {
+    descKey,
+    fast: (forage + cruise) / 2 > 0.55,
+    seek,
+    forage,
+    cruise,
+    turnBias,
+    aggression,
+  };
 }
 
 export interface LineageRow {
@@ -81,6 +103,7 @@ export interface LineageRow {
   seek: number;
   forage: number;
   cruise: number;
+  aggression: number;
 }
 
 export interface LineagePanel {
@@ -117,7 +140,7 @@ export function buildLineagePanel(): LineagePanel {
     const traits =
       `${t('tr_seek')} ${r.seek.toFixed(2)} · ` +
       `${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
-      `${t('tr_cruise')} ${r.cruise.toFixed(2)}`;
+      `${t('tr_aggr')} ${r.aggression.toFixed(2)}`;
     return (
       `<div style="margin-bottom:9px;line-height:1.45">` +
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
