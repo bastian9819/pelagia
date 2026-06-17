@@ -9,11 +9,22 @@ const DEFAULT_SPEED_IDX = 3; // 1x
 
 export interface OceanUi {
   panel: HTMLElement;
+  /** Bottom transport bar (play/step/speed/fit/colour + the menu button). */
   controls: HTMLElement;
+  /** Pop-up menu that holds panel toggles and one-shot actions (decluttered). */
+  menu: HTMLElement;
+  /** Add a panel toggle / action button into the pop-up menu (styled as a row). */
+  addTool(btn: HTMLButtonElement): void;
   update(alive: number, fps: number, frame: number): void;
   readonly paused: boolean;
   /** Simulation ticks per rendered frame (may be < 1 for slow motion). */
   readonly speed: number;
+}
+
+/** How the bottom bar's colour-by-trait button cycles + labels itself. */
+export interface ColorControl {
+  cycle(): void;
+  label(): string;
 }
 
 export function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
@@ -26,7 +37,7 @@ export function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
   return b;
 }
 
-export function buildUi(onFit: () => void, onStep: () => void): OceanUi {
+export function buildUi(onFit: () => void, onStep: () => void, color: ColorControl): OceanUi {
   let paused = false;
   let speedIdx = DEFAULT_SPEED_IDX;
   const aliveHistory: number[] = [];
@@ -78,8 +89,38 @@ export function buildUi(onFit: () => void, onStep: () => void): OceanUi {
     }
     onStep();
   });
+  const colorBtn = mkBtn('', () => {
+    color.cycle();
+    colorBtn.textContent = color.label();
+  });
+
+  // Pop-up menu: everything that isn't constant transport lives here, so the bar
+  // stays a single tidy row no matter how many tools we add.
+  const menu = document.createElement('div');
+  menu.style.cssText =
+    'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);display:none;' +
+    'flex-direction:column;gap:6px;width:220px;max-height:72vh;overflow:auto;padding:8px;' +
+    'background:rgba(2,4,10,0.92);border:1px solid rgba(63,240,216,0.22);border-radius:10px;z-index:15;';
+  const menuBtn = mkBtn('☰', () => {
+    menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+  });
+  menu.addEventListener('click', () => (menu.style.display = 'none')); // close after a pick
+  window.addEventListener('pointerdown', (e) => {
+    const target = e.target as Node;
+    if (menu.style.display !== 'none' && !menu.contains(target) && target !== menuBtn) {
+      menu.style.display = 'none';
+    }
+  });
+
+  controls.append(pauseBtn, speedBtn, stepBtn, mkBtn('⤢ fit', onFit), colorBtn, menuBtn);
+
   const langBtn = mkBtn(getLang().toUpperCase(), () => toggleLang());
-  controls.append(pauseBtn, speedBtn, stepBtn, mkBtn('⤢ fit', onFit), langBtn);
+  function addTool(btn: HTMLButtonElement): void {
+    btn.style.width = '100%';
+    btn.style.textAlign = 'left';
+    menu.append(btn);
+  }
+  addTool(langBtn);
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
@@ -92,6 +133,7 @@ export function buildUi(onFit: () => void, onStep: () => void): OceanUi {
     aliveLabel.textContent = t('creaturesAlive');
     hint.textContent = t('hint');
     langBtn.textContent = getLang().toUpperCase();
+    colorBtn.textContent = color.label();
   }
   relabel();
   onLang(relabel);
@@ -118,6 +160,8 @@ export function buildUi(onFit: () => void, onStep: () => void): OceanUi {
   return {
     panel,
     controls,
+    menu,
+    addTool,
     update(alive, fps, frame) {
       aliveEl.textContent = alive.toLocaleString();
       fpsEl.textContent = `${fps.toFixed(0)} fps · tick ${frame.toLocaleString()}`;

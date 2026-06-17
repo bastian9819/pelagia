@@ -522,6 +522,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   resize();
   window.addEventListener('resize', resize);
 
+  // --- Colour-by-trait: how creatures are tinted (renderData[6]); button lives
+  // on the transport bar and is driven through this control. ---
+  const COLOR_MODES = ['lineageWord', 'sizeWord', 'neurons', 'energyWord', 'speedWord'];
+  let colorMode = 0;
+
   // --- Stats panel + controls ---
   const ui = buildUi(
     () => {
@@ -538,25 +543,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       device.queue.submit([enc.finish()]);
       frame++;
     },
+    {
+      cycle: () => {
+        colorMode = (colorMode + 1) % COLOR_MODES.length;
+        renderData[6] = colorMode;
+        device.queue.writeBuffer(renderUbo, 0, renderData);
+      },
+      label: () => '🎨 ' + t(COLOR_MODES[colorMode]!),
+    },
   );
   document.body.appendChild(ui.panel);
   document.body.appendChild(ui.controls);
-
-  // --- Colour-by-trait: cycle how creatures are tinted (renderData[6]) ---
-  const COLOR_MODES = ['lineageWord', 'sizeWord', 'neurons', 'energyWord', 'speedWord'];
-  let colorMode = 0;
-  const colorBtn = mkBtn('', () => {
-    colorMode = (colorMode + 1) % COLOR_MODES.length;
-    renderData[6] = colorMode;
-    device.queue.writeBuffer(renderUbo, 0, renderData);
-    relabelColor();
-  });
-  function relabelColor(): void {
-    colorBtn.textContent = '🎨 ' + t(COLOR_MODES[colorMode]!);
-  }
-  relabelColor();
-  onLang(relabelColor);
-  ui.controls.appendChild(colorBtn);
+  document.body.appendChild(ui.menu);
 
   // --- Selection + brain inspector ---
   let selectedIndex = -1;
@@ -660,7 +658,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // --- Lineage explorer ---
   const lineagePanel = buildLineagePanel();
   document.body.appendChild(lineagePanel.panel);
-  ui.controls.appendChild(lineagePanel.toggle);
+  ui.addTool(lineagePanel.toggle);
 
   // --- God mode: live world parameters (write straight into the params uniform) ---
   const godDefs: Omit<GodSpec, 'value'>[] = [
@@ -695,7 +693,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     device.queue.writeBuffer(paramsBuf, 0, pbuf); // apply immediately (even if paused)
   });
   document.body.appendChild(godPanel.panel);
-  ui.controls.appendChild(godPanel.toggle);
+  ui.addTool(godPanel.toggle);
 
   // --- Share: copy a reproducible-ocean URL (seed + N + live god params) ---
   let shareFeedbackTimer = 0;
@@ -713,7 +711,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelShare();
   onLang(relabelShare);
-  ui.controls.appendChild(shareBtn);
+  ui.addTool(shareBtn);
 
   // --- Restart: reseed the ocean in place (same seed + current params, no reload) ---
   const resetBtn = mkBtn('', () => resetOcean());
@@ -722,7 +720,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelReset();
   onLang(relabelReset);
-  ui.controls.appendChild(resetBtn);
+  ui.addTool(resetBtn);
 
   // --- Help / pedagogical panel ---
   const help = document.createElement('div');
@@ -754,7 +752,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
     'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
   helpToggle.onclick = () => (help.style.display = 'grid');
-  ui.controls.appendChild(helpToggle);
+  ui.addTool(helpToggle);
 
   function relabelHelp(): void {
     helpTitle.textContent = t('helpTitle');
@@ -793,7 +791,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   const observatory = buildObservatory((id) => removeWatch(id));
   document.body.appendChild(observatory.panel);
-  ui.controls.appendChild(observatory.toggle);
+  ui.addTool(observatory.toggle);
 
   function addWatch(id: number, lineage: number): void {
     if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
