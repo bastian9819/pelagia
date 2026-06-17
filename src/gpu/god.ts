@@ -1,11 +1,13 @@
 /**
  * "God mode": live sliders that write straight into the params uniform the
- * compute shaders read every tick, so changes take effect immediately. Only
- * runtime-safe parameters are exposed (ones that don't resize buffers or the
- * spatial grid). `idx` is the f32 index into the params buffer.
+ * compute shaders read every tick, so changes apply immediately. Only
+ * runtime-safe parameters are exposed (no buffer/grid resize). `idx` is the f32
+ * index into the params buffer; `labelKey` is an i18n key.
  */
+import { t, onLang } from './i18n.js';
+
 export interface GodSpec {
-  label: string;
+  labelKey: string;
   idx: number;
   min: number;
   max: number;
@@ -29,10 +31,10 @@ export function buildGodPanel(
     'background:rgba(2,4,10,0.72);border:1px solid rgba(63,240,216,0.22);border-radius:10px;';
 
   const title = document.createElement('div');
-  title.textContent = 'god mode';
   title.style.cssText = 'font-weight:600;letter-spacing:.1em;color:#3ff0d8;margin-bottom:10px;';
   panel.append(title);
 
+  const labels: { el: HTMLElement; key: string }[] = [];
   const inputs: { input: HTMLInputElement; valEl: HTMLElement; spec: GodSpec }[] = [];
   for (const spec of specs) {
     const row = document.createElement('div');
@@ -40,7 +42,6 @@ export function buildGodPanel(
     const head = document.createElement('div');
     head.style.cssText = 'display:flex;justify-content:space-between;opacity:.85;';
     const label = document.createElement('span');
-    label.textContent = spec.label;
     const valEl = document.createElement('span');
     valEl.style.color = '#3ff0d8';
     valEl.textContent = fmt(spec.value);
@@ -59,11 +60,11 @@ export function buildGodPanel(
     });
     row.append(head, input);
     panel.append(row);
+    labels.push({ el: label, key: spec.labelKey });
     inputs.push({ input, valEl, spec });
   }
 
   const reset = document.createElement('button');
-  reset.textContent = 'reset';
   reset.style.cssText =
     'margin-top:4px;padding:6px 12px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
     'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
@@ -77,13 +78,21 @@ export function buildGodPanel(
   panel.append(reset);
 
   const toggle = document.createElement('button');
-  toggle.textContent = '⚙ god';
   toggle.style.cssText =
     'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
     'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
   toggle.onclick = () => {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   };
+
+  function relabel(): void {
+    title.textContent = t('godMode');
+    reset.textContent = t('reset');
+    toggle.textContent = '⚙ ' + t('god');
+    for (const { el, key } of labels) el.textContent = t(key);
+  }
+  relabel();
+  onLang(relabel);
 
   return { panel, toggle };
 }

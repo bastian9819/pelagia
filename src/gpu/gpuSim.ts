@@ -16,6 +16,7 @@ import { buildUi } from './ui.js';
 import { buildBrainView } from './brainView.js';
 import { buildLineagePanel, characterizeGenome, type LineageRow } from './lineages.js';
 import { buildGodPanel, type GodSpec } from './god.js';
+import { t, onLang } from './i18n.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
 
 /**
@@ -460,6 +461,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   // --- Selection + brain inspector ---
   let selectedIndex = -1;
+  let selectedLineage = -1; // to detect slot reuse (a different creature took the slot)
   let selecting = false;
   let inspectPending = false;
   const brainView = buildBrainView(() => deselect());
@@ -475,6 +477,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   function deselect(): void {
     selectedIndex = -1;
+    selectedLineage = -1;
     setSelectedUniform();
     brainView.hide();
     ring.style.display = 'none';
@@ -522,6 +525,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     selecting = false;
     if (best >= 0) {
       selectedIndex = best;
+      selectedLineage = Math.round(bi[best * 4 + 3]!);
       setSelectedUniform();
       brainView.show();
     } else {
@@ -539,14 +543,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   // --- God mode: live world parameters (write straight into the params uniform) ---
   const godSpecs: GodSpec[] = [
-    { label: 'food spawn', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1, value: pf[15] },
-    { label: 'mutation rate', idx: 12, min: 0, max: 0.5, step: 0.01, value: pf[12] },
-    { label: 'mutation size', idx: 13, min: 0, max: 1, step: 0.02, value: pf[13] },
-    { label: 'max speed', idx: 3, min: 0.5, max: 10, step: 0.1, value: pf[3] },
-    { label: 'agility', idx: 4, min: 0.05, max: 1.2, step: 0.01, value: pf[4] },
-    { label: 'metabolism', idx: 8, min: 0, max: 0.6, step: 0.01, value: pf[8] },
-    { label: 'food energy', idx: 7, min: 2, max: 30, step: 0.5, value: pf[7] },
-    { label: 'reproduce at', idx: 10, min: 30, max: 200, step: 1, value: pf[10] },
+    { labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1, value: pf[15] },
+    { labelKey: 'g_mutRate', idx: 12, min: 0, max: 0.5, step: 0.01, value: pf[12] },
+    { labelKey: 'g_mutSize', idx: 13, min: 0, max: 1, step: 0.02, value: pf[13] },
+    { labelKey: 'g_speed', idx: 3, min: 0.5, max: 10, step: 0.1, value: pf[3] },
+    { labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01, value: pf[4] },
+    { labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01, value: pf[8] },
+    { labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5, value: pf[7] },
+    { labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1, value: pf[10] },
   ];
   const godPanel = buildGodPanel(godSpecs, (idx, value) => {
     pf[idx] = value;
@@ -554,6 +558,52 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   });
   document.body.appendChild(godPanel.panel);
   ui.controls.appendChild(godPanel.toggle);
+
+  // --- Help / pedagogical panel ---
+  const help = document.createElement('div');
+  help.style.cssText =
+    'position:fixed;inset:0;display:none;place-items:center;z-index:20;background:rgba(2,4,10,0.65);';
+  const helpCard = document.createElement('div');
+  helpCard.style.cssText =
+    'max-width:520px;margin:16px;padding:24px 26px;background:rgba(6,18,41,0.97);' +
+    'border:1px solid rgba(63,240,216,0.3);border-radius:14px;color:#cfe8ff;' +
+    'font:14px/1.65 ui-sans-serif,system-ui,sans-serif;';
+  const helpTitle = document.createElement('div');
+  helpTitle.style.cssText = 'font-size:20px;font-weight:600;color:#3ff0d8;margin-bottom:12px;';
+  const helpBody = document.createElement('div');
+  const helpClose = document.createElement('button');
+  helpClose.textContent = '✕';
+  helpClose.style.cssText =
+    'margin-top:16px;padding:8px 16px;background:rgba(63,240,216,0.15);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.3);border-radius:8px;cursor:pointer;font:inherit;';
+  helpClose.onclick = () => (help.style.display = 'none');
+  helpCard.append(helpTitle, helpBody, helpClose);
+  help.append(helpCard);
+  help.addEventListener('click', (e) => {
+    if (e.target === help) help.style.display = 'none';
+  });
+  document.body.appendChild(help);
+
+  const helpToggle = document.createElement('button');
+  helpToggle.style.cssText =
+    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  helpToggle.onclick = () => (help.style.display = 'grid');
+  ui.controls.appendChild(helpToggle);
+
+  function relabelHelp(): void {
+    helpTitle.textContent = t('helpTitle');
+    helpBody.innerHTML = t('helpBody');
+    helpToggle.textContent = '? ' + t('help');
+  }
+  relabelHelp();
+  onLang(relabelHelp);
+
+  // Show the explainer once on first visit.
+  if (!localStorage.getItem('pelagia-seen-help')) {
+    help.style.display = 'grid';
+    localStorage.setItem('pelagia-seen-help', '1');
+  }
   let analysisPending = false;
   let lastAnalysisT = 0;
   const prevCounts = new Map<number, number>();
@@ -604,13 +654,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         gRead.destroy();
 
         top.forEach(([lin, count], k) => {
-          const genome = gAll.subarray(k * GENOME_SIZE, (k + 1) * GENOME_SIZE);
+          const ch = characterizeGenome(gAll.subarray(k * GENOME_SIZE, (k + 1) * GENOME_SIZE));
           rows.push({
             lineage: lin,
             hue: floatFromU32(pcgHash(lin)),
             count,
             trend: count - (prevCounts.get(lin) ?? count),
-            desc: characterizeGenome(genome),
+            descKey: ch.descKey,
+            fast: ch.fast,
           });
         });
         prevCounts.clear();
@@ -734,6 +785,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   let frame = 0;
   let frames = 0;
+  let stepAcc = 0;
   let lastFpsT = performance.now();
 
   // Headless warm-up: advance the simulation before the first rendered frame so
@@ -756,9 +808,15 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     const wantH = Math.max(1, Math.floor(window.innerHeight * dpr));
     if (canvas.width !== wantW || canvas.height !== wantH) resize();
 
-    // Simulation steps (paused -> 0). Each step is its own submit so the frame
-    // counter (used for RNG keying) varies per tick.
-    const steps = ui.paused ? 0 : ui.speed;
+    // Simulation steps. Speed may be < 1 (slow motion): accumulate fractional
+    // steps so e.g. 0.5x runs one tick every other frame. Each step is its own
+    // submit so the frame counter (used for RNG keying) varies per tick.
+    let steps = 0;
+    if (!ui.paused) {
+      stepAcc += ui.speed;
+      steps = Math.floor(stepAcc);
+      stepAcc -= steps;
+    }
     for (let k = 0; k < steps; k++) {
       writeParams(frame);
       const enc = device.createCommandEncoder();
@@ -812,14 +870,21 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         inspectReadback.unmap();
         inspectPending = false;
         if (selectedIndex < 0) return;
-        brainView.update(d);
-        if (d[27]! < 0.5) {
-          // The creature died: stop tracking but leave the panel on its last state.
+        const alive = d[27]! >= 0.5;
+        const sameLineage = Math.round(d[26]!) === selectedLineage;
+        if (alive && sameLineage) {
+          brainView.update(d);
+          positionRing(d);
+        } else if (!alive && sameLineage) {
+          // Our creature died: show it deceased once, then stop following.
+          brainView.update(d);
           ring.style.display = 'none';
           selectedIndex = -1;
           setSelectedUniform();
         } else {
-          positionRing(d);
+          // The slot was reused by a different creature — drop the selection
+          // rather than silently follow the impostor.
+          deselect();
         }
       });
     }

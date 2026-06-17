@@ -1,6 +1,7 @@
 import './style.css';
 import { World } from './sim/world.js';
 import { DEFAULT_CONFIG } from './core/config.js';
+import { t } from './gpu/i18n.js';
 
 /**
  * Entry point.
@@ -62,8 +63,8 @@ function showLoading(): { dismiss: () => void; remove: () => void } {
   const el = document.createElement('div');
   el.className = 'loading';
   el.innerHTML =
-    '<div><div class="loading-title">PELAGIA</div>' +
-    '<div class="loading-sub">invocando el océano…</div></div>';
+    `<div><div class="loading-title">PELAGIA</div>` +
+    `<div class="loading-sub">${t('loading')}</div></div>`;
   document.body.appendChild(el);
   return {
     dismiss: () => {

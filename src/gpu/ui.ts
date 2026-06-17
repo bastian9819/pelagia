@@ -1,20 +1,33 @@
 /**
- * Lightweight DOM UI for the ocean: a live stats panel (population + sparkline +
- * fps) and a control bar (pause, speed, fit-view). Kept out of the render code.
+ * Live stats panel (population + sparkline + fps) and control bar (pause, speed,
+ * fit, language). Text is localised via i18n.
  */
+import { t, onLang, toggleLang, getLang } from './i18n.js';
+
+const SPEEDS = [0.25, 0.5, 1, 2, 4];
+
 export interface OceanUi {
   panel: HTMLElement;
   controls: HTMLElement;
-  /** Push the latest stats (call ~2/s). */
   update(alive: number, fps: number, frame: number): void;
   readonly paused: boolean;
-  /** Simulation ticks to run per rendered frame. */
+  /** Simulation ticks per rendered frame (may be < 1 for slow motion). */
   readonly speed: number;
+}
+
+function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.style.cssText =
+    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  b.onclick = onClick;
+  return b;
 }
 
 export function buildUi(onFit: () => void): OceanUi {
   let paused = false;
-  let speed = 1;
+  let speedIdx = 2; // 1x
   const aliveHistory: number[] = [];
 
   const panel = document.createElement('div');
@@ -30,7 +43,6 @@ export function buildUi(onFit: () => void): OceanUi {
   aliveEl.textContent = '—';
   aliveEl.style.cssText = 'font-size:24px;margin-top:6px;';
   const aliveLabel = document.createElement('div');
-  aliveLabel.textContent = 'creatures alive';
   aliveLabel.style.cssText = 'opacity:.55;font-size:11px;';
   const spark = document.createElement('canvas');
   spark.width = 190;
@@ -40,33 +52,25 @@ export function buildUi(onFit: () => void): OceanUi {
   fpsEl.textContent = '—';
   fpsEl.style.cssText = 'opacity:.65;margin-top:8px;';
   const hint = document.createElement('div');
-  hint.style.cssText = 'opacity:.45;font-size:11px;margin-top:10px;line-height:1.5;';
-  hint.innerHTML = 'arrastra para mover · rueda para zoom<br>clic en una criatura → su cerebro';
+  hint.style.cssText =
+    'opacity:.45;font-size:11px;margin-top:10px;line-height:1.5;white-space:pre-line;';
   panel.append(title, aliveEl, aliveLabel, spark, fpsEl, hint);
   const sctx = spark.getContext('2d')!;
 
   const controls = document.createElement('div');
   controls.style.cssText =
-    'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:8px;' +
-    'font:13px ui-monospace,monospace;';
-  const mkBtn = (label: string, onClick: () => void): HTMLButtonElement => {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.style.cssText =
-      'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-      'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
-    b.onclick = onClick;
-    return b;
-  };
+    'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;' +
+    'justify-content:center;max-width:96vw;font:13px ui-monospace,monospace;';
   const pauseBtn = mkBtn('⏸', () => {
     paused = !paused;
     pauseBtn.textContent = paused ? '▶' : '⏸';
   });
   const speedBtn = mkBtn('1×', () => {
-    speed = speed === 1 ? 2 : speed === 2 ? 4 : 1;
-    speedBtn.textContent = `${speed}×`;
+    speedIdx = (speedIdx + 1) % SPEEDS.length;
+    speedBtn.textContent = `${SPEEDS[speedIdx]}×`;
   });
-  controls.append(pauseBtn, speedBtn, mkBtn('⤢ fit', onFit));
+  const langBtn = mkBtn(getLang().toUpperCase(), () => toggleLang());
+  controls.append(pauseBtn, speedBtn, mkBtn('⤢ fit', onFit), langBtn);
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
@@ -74,6 +78,14 @@ export function buildUi(onFit: () => void): OceanUi {
       pauseBtn.click();
     }
   });
+
+  function relabel(): void {
+    aliveLabel.textContent = t('creaturesAlive');
+    hint.textContent = t('hint');
+    langBtn.textContent = getLang().toUpperCase();
+  }
+  relabel();
+  onLang(relabel);
 
   function drawSpark(): void {
     const w = spark.width;
@@ -108,7 +120,7 @@ export function buildUi(onFit: () => void): OceanUi {
       return paused;
     },
     get speed() {
-      return speed;
+      return SPEEDS[speedIdx]!;
     },
   };
 }
