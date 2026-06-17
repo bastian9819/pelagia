@@ -23,6 +23,7 @@ import {
 import { buildGodPanel, type GodSpec } from './god.js';
 import {
   buildObservatory,
+  buildEvolutionHistory,
   type ObservatoryData,
   type WorldSample,
   type LineageHistory,
@@ -792,6 +793,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const observatory = buildObservatory((id) => removeWatch(id));
   document.body.appendChild(observatory.panel);
   ui.addTool(observatory.toggle);
+  const history = buildEvolutionHistory();
+  document.body.appendChild(history.panel);
+  ui.addTool(history.toggle);
 
   function addWatch(id: number, lineage: number): void {
     if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
@@ -823,7 +827,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     return { world: worldSeries, lineages, watched: [...watched.values()] };
   }
   function pushObservatory(): void {
-    observatory.update(buildObservatoryData());
+    const obsData = buildObservatoryData();
+    observatory.update(obsData);
+    history.update(obsData);
   }
 
   // Sample the tracked creatures through the inspect pass (one tiny dispatch each;
@@ -878,38 +884,37 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     }
   }
 
-  // Append this sample's population to each clade's curve; track newly-seen clades,
-  // drop vanished ones to zero, and bound the map (evict long-extinct, then small).
+  // Maintain per-clade population curves on ONE shared time axis (every tracked
+  // clade gets exactly one sample per call, 0 when absent), so they can be stacked
+  // into a Muller plot. Track newly-seen clades; bound the map (evict long-extinct).
   function updateLineageHistories(
     counts: Map<number, number>,
     poolMeta: Map<number, LineageTraits>,
   ): void {
-    const seen = new Set<number>();
+    // 1. Start tracking newly-seen, sizeable/characterised clades.
     for (const [lin, count] of counts) {
+      if (lineageHist.has(lin)) continue;
       const meta = poolMeta.get(lin);
-      let tr = lineageHist.get(lin);
-      if (!tr) {
-        if (!meta && count < 2) continue; // only track sizeable or characterised clades
-        tr = {
-          hue: floatFromU32(pcgHash(lin)),
-          samples: [],
-          lastTick: frame,
-          count,
-          trend: 0,
-          descKey: meta?.descKey ?? 'desc_erratic',
-          fast: meta?.fast ?? false,
-          seek: meta?.seek ?? 0,
-          forage: meta?.forage ?? 0,
-          cruise: meta?.cruise ?? 0,
-          aggression: meta?.aggression ?? 0,
-          neurons: meta?.neurons ?? 0,
-        };
-        lineageHist.set(lin, tr);
-      }
-      seen.add(lin);
-      tr.trend = count - tr.count;
-      tr.count = count;
-      tr.lastTick = frame;
+      if (!meta && count < 2) continue;
+      lineageHist.set(lin, {
+        hue: floatFromU32(pcgHash(lin)),
+        samples: [],
+        lastTick: frame,
+        count: 0,
+        trend: 0,
+        descKey: meta?.descKey ?? 'desc_erratic',
+        fast: meta?.fast ?? false,
+        seek: meta?.seek ?? 0,
+        forage: meta?.forage ?? 0,
+        cruise: meta?.cruise ?? 0,
+        aggression: meta?.aggression ?? 0,
+        neurons: meta?.neurons ?? 0,
+      });
+    }
+    // 2. Append one aligned sample to every tracked clade + refresh its traits.
+    for (const [lin, tr] of lineageHist) {
+      const c = counts.get(lin) ?? 0;
+      const meta = poolMeta.get(lin);
       if (meta) {
         tr.descKey = meta.descKey;
         tr.fast = meta.fast;
@@ -919,16 +924,13 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         tr.aggression = meta.aggression;
         tr.neurons = meta.neurons;
       }
-      tr.samples.push(count);
+      tr.trend = c - tr.count;
+      tr.count = c;
+      if (c > 0) tr.lastTick = frame;
+      tr.samples.push(c);
       if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
     }
-    for (const [lin, tr] of lineageHist) {
-      if (seen.has(lin) || tr.count === 0) continue;
-      tr.trend = -tr.count;
-      tr.count = 0;
-      tr.samples.push(0);
-      if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
-    }
+    // 3. Bound the map (evict long-extinct, then smallest).
     if (lineageHist.size > MAX_TRACKED_LINEAGES) {
       const entries = [...lineageHist.entries()].sort((a, b) => {
         const da = a[1].count === 0 ? 0 : 1;

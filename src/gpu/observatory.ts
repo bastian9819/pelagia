@@ -476,3 +476,153 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
     },
   };
 }
+
+export interface HistoryPanel {
+  panel: HTMLElement;
+  toggle: HTMLButtonElement;
+  isOpen(): boolean;
+  update(data: ObservatoryData): void;
+}
+
+/**
+ * Evolutionary history as a Muller plot: each clade is a coloured band stacked
+ * over time, its thickness = its population. Clades visibly rise, take over and
+ * go extinct — the evolutionary story drawn from the per-clade population curves
+ * the sampler already records (all on one shared time axis).
+ */
+export function buildEvolutionHistory(): HistoryPanel {
+  let open = false;
+  let last: LineageHistory[] = [];
+
+  const panel = document.createElement('div');
+  panel.style.cssText =
+    'position:fixed;inset:0;display:none;z-index:31;overflow:auto;' +
+    'background:rgba(2,4,10,0.92);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'max-width:1100px;margin:0 auto;padding:22px 22px 60px;';
+  panel.append(inner);
+
+  const header = document.createElement('div');
+  header.style.cssText =
+    'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;';
+  const h1 = document.createElement('div');
+  h1.style.cssText = `font-size:20px;font-weight:600;letter-spacing:.12em;color:${ACCENT};`;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText =
+    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  closeBtn.onclick = () => setOpen(false);
+  header.append(h1, closeBtn);
+
+  const note = document.createElement('div');
+  note.style.cssText = 'opacity:.7;margin-bottom:10px;line-height:1.5;';
+  const card = document.createElement('div');
+  card.style.cssText = CARD;
+  const cw = 1040;
+  const ch = 340;
+  const chart = document.createElement('canvas');
+  chart.style.cssText = `display:block;width:100%;max-width:${cw}px;height:${ch}px;`;
+  const timeLbl = document.createElement('div');
+  timeLbl.style.cssText = 'opacity:.5;font-size:11px;margin-top:4px;';
+  const legend = document.createElement('div');
+  legend.style.cssText = 'margin-top:12px;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;';
+  card.append(chart, timeLbl, legend);
+  inner.append(header, note, card);
+
+  const toggle = document.createElement('button');
+  toggle.style.cssText =
+    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  toggle.onclick = () => setOpen(!open);
+
+  function setOpen(v: boolean): void {
+    open = v;
+    panel.style.display = v ? 'block' : 'none';
+    if (v) render();
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && open) setOpen(false);
+  });
+
+  function valAt(l: LineageHistory, c: number, T: number): number {
+    const idx = l.samples.length - (T - c); // align series to the newest sample
+    return idx >= 0 ? l.samples[idx]! : 0;
+  }
+
+  function drawMuller(lineages: LineageHistory[]): void {
+    const ctx = setupCanvas(chart, cw, ch);
+    ctx.clearRect(0, 0, cw, ch);
+    const lins = lineages.filter((l) => l.samples.length > 0).sort((a, b) => a.lineage - b.lineage);
+    if (lins.length === 0) {
+      ctx.fillStyle = 'rgba(207,232,255,0.5)';
+      ctx.font = '13px ui-monospace, monospace';
+      ctx.fillText(t('ph_empty'), 8, 20);
+      return;
+    }
+    let T = 0;
+    for (const l of lins) T = Math.max(T, l.samples.length);
+    let maxTot = 1;
+    for (let c = 0; c < T; c++) {
+      let s = 0;
+      for (const l of lins) s += valAt(l, c, T);
+      if (s > maxTot) maxTot = s;
+    }
+    const colW = cw / T;
+    for (let c = 0; c < T; c++) {
+      let y = ch;
+      for (const l of lins) {
+        const v = valAt(l, c, T);
+        if (v <= 0) continue;
+        const h = (v / maxTot) * (ch - 2);
+        ctx.fillStyle = `hsl(${Math.round(l.hue * 360)}, 85%, 58%)`;
+        ctx.fillRect(c * colW, y - h, Math.ceil(colW) + 0.6, h + 0.6);
+        y -= h;
+      }
+    }
+  }
+
+  function renderLegend(lineages: LineageHistory[]): void {
+    const top = [...lineages]
+      .filter((l) => l.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    legend.innerHTML = top
+      .map((l) => {
+        const c = `hsl(${Math.round(l.hue * 360)}, 85%, 58%)`;
+        return (
+          `<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;` +
+          `border-radius:2px;background:${c};margin-right:5px"></span>#${l.lineage} · ${l.count} · ${t(l.descKey)}</span>`
+        );
+      })
+      .join('');
+  }
+
+  function render(): void {
+    if (!open) return;
+    h1.textContent = `PELAGIA · ${t('ph_title')}`;
+    note.textContent = t('ph_note');
+    timeLbl.textContent = t('ph_time');
+    drawMuller(last);
+    renderLegend(last);
+  }
+
+  function relabelToggle(): void {
+    toggle.textContent = '🌳 ' + t('ph_history');
+  }
+  relabelToggle();
+  onLang(() => {
+    relabelToggle();
+    render();
+  });
+
+  return {
+    panel,
+    toggle,
+    isOpen: () => open,
+    update(data) {
+      last = data.lineages;
+      render();
+    },
+  };
+}
