@@ -7,6 +7,7 @@ struct RParams {
   brightness: f32,
   colorMode: f32,  // 0 lineage, 1 size, 2 neurons, 3 energy, 4 speed
   _p1: f32,
+  hl: vec4<f32>,   // highlight: x = lineage id, y = on (>0.5), _, _
 };
 
 @group(0) @binding(0) var<uniform> R: RParams;
@@ -76,7 +77,11 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   } else if (mode == 4u) {
     col = hue2rgb((1.0 - clamp(s.w / 4.0, 0.0, 1.0)) * 0.66);
   }
-  out.color = col * R.brightness;
+  // Highlight mode: dim every creature that isn't in the selected lineage, so a
+  // clade stands out among thousands.
+  var dim = 1.0;
+  if (R.hl.y > 0.5 && abs(b.w - R.hl.x) > 0.5) { dim = 0.1; }
+  out.color = col * R.brightness * dim;
   return out;
 }
 

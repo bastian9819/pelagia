@@ -31,6 +31,8 @@ struct Params {
 //   [2nc + 2]         -> predation kills this tick (stat; reset each tick)
 //   [2nc + 3, +f)     -> per-food eat claim (1 = taken this tick)
 //   [2nc+3+f, +n)     -> per-creature predation claim (predatorIndex+1; 0 = none)
+//   [2nc+3+f+n]       -> speciation counter (new lineages minted; persists)
+//   [2nc+4+f+n, +n)   -> parent lineage id of new lineage k (k = newId - n)
 // cellStart holds TWO regions of offsets: food [0, nc] then creatures [nc+1, 2nc+1].
 // sortedIdx holds food indices [0, f) then creature indices [f, f+n).
 @group(1) @binding(0) var<storage, read_write> gridData: array<atomic<u32>>;
@@ -44,6 +46,8 @@ fn budgetIdx() -> u32 { return P.d0.z * 2u + 1u; }
 fn predCountIdx() -> u32 { return P.d0.z * 2u + 2u; }
 fn claimIdx(j: u32) -> u32 { return P.d0.z * 2u + 3u + j; }
 fn eatenIdx(i: u32) -> u32 { return P.d0.z * 2u + 3u + P.d1.x + i; } // + f + i
+fn speciesCountIdx() -> u32 { return P.d0.z * 2u + 3u + P.d1.x + P.d0.w; } // after eatenBy (+f+n)
+fn parentIdx(k: u32) -> u32 { return P.d0.z * 2u + 4u + P.d1.x + P.d0.w + k; } // parent of new lineage k
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 

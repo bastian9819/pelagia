@@ -145,10 +145,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // gridData also carries freeCount, food budget, the predation counter, food
   // claims and per-creature predation claims. COPY_DST so restart can reset
   // freeCount in place.
+  // ... + speciation counter (1) + parent-lineage pointers (n) for the family tree.
   const gridDataBuf = device.createBuffer({
-    size: (2 * numCells + 3 + f + n) * 4,
+    size: (2 * numCells + 4 + f + 2 * n) * 4,
     usage: S | CS | CD,
   });
+  const speciesCountOffset = (2 * numCells + 3 + f + n) * 4; // byte offset of the counter
   const cellStartBuf = device.createBuffer({ size: 2 * (numCells + 1) * 4, usage: S });
   const sortedBuf = device.createBuffer({ size: (f + n) * 4, usage: S });
   const freeListBuf = device.createBuffer({ size: n * 4, usage: S });
@@ -216,6 +218,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // period in ticks. On by default (moderate) so the boom/bust is visible.
   pf[28] = 0.45;
   pf[29] = 1600;
+  // Speciation rate (ext2.z): chance per birth that the offspring founds a new
+  // lineage (new colour + parent link) → a branching family tree over time.
+  pf[30] = 0.004;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -352,9 +357,15 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
 
   // --- Render: HDR accumulation texture -> trails + glow -> tonemapped present ---
-  const renderUbo = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | CD });
-  const renderData = new Float32Array(8);
+  const renderUbo = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | CD });
+  const renderData = new Float32Array(12);
   renderData[7] = Math.floor(f / 16); // big-food slot count for the food renderer
+  // renderData[8] = highlighted lineage id, [9] = highlight on (1/0).
+  let highlightOn = false;
+  function applyHighlight(): void {
+    renderData[8] = selectedLineage;
+    renderData[9] = highlightOn && selectedIndex >= 0 ? 1 : 0;
+  }
   const ACCUM_FORMAT: GPUTextureFormat = 'rgba16float';
   const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
 
@@ -589,6 +600,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     selectedIndex = -1;
     selectedLineage = -1;
     setSelectedUniform();
+    applyHighlight();
     brainView.hide();
     brainView.setGenome(null);
     ring.style.display = 'none';
@@ -653,6 +665,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       selectedIndex = best;
       selectedLineage = Math.round(bi[best * 4 + 3]!);
       setSelectedUniform();
+      applyHighlight();
       brainView.show();
       void loadGenome(best, selectedLineage);
     } else {
@@ -686,6 +699,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { labelKey: 'g_bigFood', idx: 27, min: 1, max: 12, step: 0.5 },
     { labelKey: 'g_dayNight', idx: 28, min: 0, max: 0.85, step: 0.05 },
     { labelKey: 'g_dayLength', idx: 29, min: 400, max: 4000, step: 100 },
+    { labelKey: 'g_speciation', idx: 30, min: 0, max: 0.03, step: 0.001 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the
@@ -798,6 +812,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const worldSeries: WorldSample[] = [];
   const lineageHist = new Map<number, LinTrack>();
   const watched = new Map<number, Watched>();
+  const parentMap = new Map<number, number>(); // new lineage id -> parent lineage id
   let watchPending = false;
 
   const observatory = buildObservatory((id) => removeWatch(id));
@@ -806,6 +821,19 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const history = buildEvolutionHistory();
   document.body.appendChild(history.panel);
   ui.addTool(history.toggle);
+
+  // Highlight: dim everything but the selected creature's lineage (follow a clade).
+  const highlightBtn = mkBtn('', () => {
+    highlightOn = !highlightOn;
+    applyHighlight();
+    relabelHighlight();
+  });
+  function relabelHighlight(): void {
+    highlightBtn.textContent = (highlightOn ? '🔦 ' : '○ ') + t('highlight');
+  }
+  relabelHighlight();
+  onLang(relabelHighlight);
+  ui.addTool(highlightBtn);
 
   function addWatch(id: number, lineage: number): void {
     if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
@@ -834,7 +862,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         samples: tr.samples,
       });
     }
-    return { world: worldSeries, lineages, watched: [...watched.values()] };
+    return { world: worldSeries, lineages, watched: [...watched.values()], parents: parentMap };
   }
   function pushObservatory(): void {
     const obsData = buildObservatoryData();
@@ -968,18 +996,35 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     try {
       const bRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });
       const fRead = device.createBuffer({ size: f * 8, usage: GPUBufferUsage.MAP_READ | CD });
+      // Speciation counter + parent-lineage pointers, for the family tree.
+      const spRead = device.createBuffer({
+        size: (1 + n) * 4,
+        usage: GPUBufferUsage.MAP_READ | CD,
+      });
       let enc = device.createCommandEncoder();
       enc.copyBufferToBuffer(bioBuf, 0, bRead, 0, n * 16);
       enc.copyBufferToBuffer(foodBuf, 0, fRead, 0, f * 8);
+      enc.copyBufferToBuffer(gridDataBuf, speciesCountOffset, spRead, 0, (1 + n) * 4);
       device.queue.submit([enc.finish()]);
-      await Promise.all([bRead.mapAsync(GPUMapMode.READ), fRead.mapAsync(GPUMapMode.READ)]);
+      await Promise.all([
+        bRead.mapAsync(GPUMapMode.READ),
+        fRead.mapAsync(GPUMapMode.READ),
+        spRead.mapAsync(GPUMapMode.READ),
+      ]);
       const bi = new Float32Array(bRead.getMappedRange().slice(0));
       const fo = new Float32Array(fRead.getMappedRange().slice(0));
+      const sp = new Uint32Array(spRead.getMappedRange().slice(0));
       bRead.unmap();
       bRead.destroy();
       let foodAlive = 0;
       for (let j = 0; j < f; j++) if (fo[j * 2]! >= 0) foodAlive++;
       fRead.unmap();
+      spRead.unmap();
+      spRead.destroy();
+      // Rebuild the parent map: new lineage (n + k) descends from parent sp[1 + k].
+      parentMap.clear();
+      const newCount = Math.min(sp[0]!, n);
+      for (let k = 0; k < newCount; k++) parentMap.set(n + k, sp[1 + k]!);
       fRead.destroy();
 
       const counts = new Map<number, number>();
@@ -1246,6 +1291,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     device.queue.writeBuffer(weightsBuf, 0, weightsData);
     device.queue.writeBuffer(foodBuf, 0, foodData);
     device.queue.writeBuffer(gridDataBuf, 2 * numCells * 4, new Uint32Array([0])); // freeCount = 0
+    device.queue.writeBuffer(gridDataBuf, speciesCountOffset, new Uint32Array([0])); // speciation counter = 0
     frame = 0;
     stepAcc = 0;
     alive = n;

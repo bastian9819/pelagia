@@ -51,8 +51,21 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
   b.x = b.x - half;
   bio[i] = b;
 
-  // Inherit hue + lineage id unchanged (bio.w = stable lineage; bio.y = its colour).
-  bio[slot] = vec4<f32>(half, b.y, 1.0, b.w);
+  // Speciation: with probability ext2.z the offspring FOUNDS a new lineage — a new
+  // stable id, a fresh colour (visible split) and a pointer to its parent lineage,
+  // so descent forms a branching tree. Otherwise it inherits hue + lineage as-is.
+  var childHue = b.y;
+  var childLin = b.w;
+  if (P.ext2.z > 0.0 && rnd(i + 7u, frame) < P.ext2.z) {
+    let cur = atomicAdd(&gridData[speciesCountIdx()], 1u);
+    if (cur < P.d0.w) { // cap new lineages at n
+      let nid = P.d0.w + cur;
+      childLin = f32(nid);
+      childHue = f32(pcg(nid)) / 4294967296.0; // matches floatFromU32(pcgHash(nid)) on CPU
+      atomicStore(&gridData[parentIdx(cur)], u32(b.w));
+    }
+  }
+  bio[slot] = vec4<f32>(half, childHue, 1.0, childLin);
 
   let s = state[i];
   let jx = (rnd(i + 11u, frame) - 0.5) * 4.0;

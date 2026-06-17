@@ -14,6 +14,10 @@
  * while the view is open; data keeps accumulating either way (in gpuSim).
  */
 import { t, onLang } from './i18n.js';
+import { pcgHash, floatFromU32 } from '../core/rng.js';
+
+/** Lineage colour from its id — matches the GPU's per-creature hue. */
+const hueOf = (id: number): number => floatFromU32(pcgHash(id));
 
 export interface WorldSample {
   tick: number;
@@ -71,6 +75,8 @@ export interface ObservatoryData {
   world: WorldSample[];
   lineages: LineageHistory[];
   watched: Watched[];
+  /** new lineage id -> parent lineage id (for the family tree / cladogram). */
+  parents: Map<number, number>;
 }
 
 export interface Observatory {
@@ -180,7 +186,7 @@ function mkCard(titleKey: string): { card: HTMLElement; title: HTMLElement; body
 
 export function buildObservatory(onRemoveWatch: (id: number) => void): Observatory {
   let open = false;
-  let last: ObservatoryData = { world: [], lineages: [], watched: [] };
+  let last: ObservatoryData = { world: [], lineages: [], watched: [], parents: new Map() };
 
   const panel = document.createElement('div');
   panel.style.cssText =
@@ -499,6 +505,7 @@ export interface HistoryPanel {
 export function buildEvolutionHistory(): HistoryPanel {
   let open = false;
   let last: LineageHistory[] = [];
+  let lastParents = new Map<number, number>();
 
   const panel = document.createElement('div');
   panel.style.cssText =
@@ -534,7 +541,17 @@ export function buildEvolutionHistory(): HistoryPanel {
   const legend = document.createElement('div');
   legend.style.cssText = 'margin-top:12px;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;';
   card.append(chart, timeLbl, legend);
-  inner.append(header, note, card);
+
+  // Family tree (cladogram): who descends from whom, once speciation has branched.
+  const treeCard = document.createElement('div');
+  treeCard.style.cssText = `${CARD}margin-top:16px;`;
+  const treeLbl = document.createElement('div');
+  treeLbl.style.cssText = 'opacity:.7;font-size:12px;margin-bottom:8px;';
+  const tch = 300;
+  const tree = document.createElement('canvas');
+  tree.style.cssText = `display:block;width:100%;max-width:${cw}px;height:${tch}px;`;
+  treeCard.append(treeLbl, tree);
+  inner.append(header, note, card, treeCard);
 
   const toggle = document.createElement('button');
   toggle.style.cssText =
@@ -604,13 +621,121 @@ export function buildEvolutionHistory(): HistoryPanel {
       .join('');
   }
 
+  interface TNode {
+    id: number;
+    hue: number;
+    count: number;
+    parent: number;
+    children: TNode[];
+    depth: number;
+    y: number;
+  }
+
+  // Cladogram: top clades as leaves + their ancestors (via parent pointers), laid
+  // out left→right by depth with each node's y = mean of its children's (tidy-ish).
+  function drawTree(lineages: LineageHistory[], parents: Map<number, number>): void {
+    const ctx = setupCanvas(tree, cw, tch);
+    ctx.clearRect(0, 0, cw, tch);
+    const byId = new Map(lineages.map((l) => [l.lineage, l]));
+    const nodes = new Map<number, TNode>();
+    const add = (id: number): TNode => {
+      let nd = nodes.get(id);
+      if (!nd) {
+        const l = byId.get(id);
+        nd = {
+          id,
+          hue: l ? l.hue : hueOf(id),
+          count: l ? l.count : 0,
+          parent: parents.get(id) ?? -1,
+          children: [],
+          depth: 0,
+          y: 0,
+        };
+        nodes.set(id, nd);
+      }
+      return nd;
+    };
+    const top = [...lineages]
+      .filter((l) => l.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 14);
+    for (const l of top) {
+      add(l.lineage);
+      let id = l.lineage;
+      let guard = 0;
+      while (parents.has(id) && guard++ < 24) {
+        const p = parents.get(id)!;
+        add(p);
+        id = p;
+      }
+    }
+    if (nodes.size === 0) {
+      ctx.fillStyle = 'rgba(207,232,255,0.5)';
+      ctx.font = '13px ui-monospace, monospace';
+      ctx.fillText(t('ph_empty'), 8, 20);
+      return;
+    }
+    for (const nd of nodes.values()) {
+      if (nd.parent >= 0 && nodes.has(nd.parent)) nodes.get(nd.parent)!.children.push(nd);
+    }
+    const roots = [...nodes.values()].filter((n) => n.parent < 0 || !nodes.has(n.parent));
+    let leaf = 0;
+    const layout = (nd: TNode, depth: number): void => {
+      nd.depth = depth;
+      if (nd.children.length === 0) {
+        nd.y = leaf++;
+      } else {
+        nd.children.forEach((c) => layout(c, depth + 1));
+        nd.y = nd.children.reduce((s, c) => s + c.y, 0) / nd.children.length;
+      }
+    };
+    roots.forEach((r) => layout(r, 0));
+    let maxDepth = 0;
+    for (const nd of nodes.values()) maxDepth = Math.max(maxDepth, nd.depth);
+    const leaves = Math.max(1, leaf - 1);
+    const mx = 90;
+    const my = 24;
+    const px = (d: number): number => mx + (maxDepth === 0 ? 0 : (d / maxDepth) * (cw - 2 * mx));
+    const py = (y: number): number => my + (y / leaves) * (tch - 2 * my);
+    // edges
+    ctx.strokeStyle = 'rgba(120,160,200,0.35)';
+    ctx.lineWidth = 1.4;
+    for (const nd of nodes.values()) {
+      for (const c of nd.children) {
+        ctx.beginPath();
+        ctx.moveTo(px(nd.depth), py(nd.y));
+        ctx.lineTo(px(c.depth), py(c.y));
+        ctx.stroke();
+      }
+    }
+    // nodes
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    for (const nd of nodes.values()) {
+      const x = px(nd.depth);
+      const y = py(nd.y);
+      const r = 3 + Math.min(11, Math.sqrt(nd.count));
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${Math.round(nd.hue * 360)}, 85%, 58%)`;
+      ctx.fill();
+      if (nd.count > 0) {
+        ctx.fillStyle = 'rgba(207,232,255,0.7)';
+        ctx.textAlign = 'left';
+        ctx.fillText(`#${nd.id}`, x + r + 3, y);
+      }
+    }
+  }
+
   function render(): void {
     if (!open) return;
     h1.textContent = `PELAGIA · ${t('ph_title')}`;
     note.textContent = t('ph_note');
     timeLbl.textContent = t('ph_time');
+    treeLbl.textContent = t('ph_tree');
     drawMuller(last);
     renderLegend(last);
+    drawTree(last, lastParents);
   }
 
   function relabelToggle(): void {
@@ -628,6 +753,7 @@ export function buildEvolutionHistory(): HistoryPanel {
     isOpen: () => open,
     update(data) {
       last = data.lineages;
+      lastParents = data.parents;
       render();
     },
   };
