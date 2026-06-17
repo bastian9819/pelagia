@@ -8,7 +8,7 @@ import foodShader from './shaders/render_food.wgsl?raw';
 import fadeShader from './shaders/fade.wgsl?raw';
 import presentShader from './shaders/present.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
-import { GENOME_SIZE, WEIGHT_GENES } from '../sim/brain.js';
+import { GENOME_SIZE, WEIGHT_GENES, SIZE_GENE } from '../sim/brain.js';
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
@@ -111,9 +111,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       }
       // Activation genes biased active (uniform(-0.3, 1.0), ~77% on) so brains
       // start capable; mutation then evolves how many neurons each lineage uses.
-      for (let k = WEIGHT_GENES; k < GENOME_SIZE; k++) {
+      for (let k = WEIGHT_GENES; k < SIZE_GENE; k++) {
         weightsData[wb + k] = rngWeights.nextFloat() * 1.3 - 0.3;
       }
+      // Body-size gene with real spread (~N(1, 0.4) bodies) so predator/prey size
+      // niches can form from the start instead of waiting for variance to build.
+      weightsData[wb + SIZE_GENE] = rngWeights.nextGaussian() * 0.8;
     }
     for (let j = 0; j < f; j++) {
       if (j < foodInitAlive) {
@@ -378,6 +381,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       { binding: 0, resource: { buffer: renderUbo } },
       { binding: 1, resource: { buffer: stateBuf } },
       { binding: 2, resource: { buffer: bioBuf } },
+      { binding: 3, resource: { buffer: weightsBuf } }, // body-size gene for sizing
     ],
   });
   const foodBind = device.createBindGroup({
@@ -945,6 +949,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       const rows: LineageRow[] = [];
       const strategy: Record<string, number> = {};
       const poolMeta = new Map<number, LineageTraits>();
+      let meanSize = 1;
       if (pool.length > 0) {
         const gRead = device.createBuffer({
           size: pool.length * GENOME_SIZE * 4,
@@ -1015,12 +1020,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         prevCounts.clear();
         for (const [lin, count] of counts) prevCounts.set(lin, count);
 
-        // Strategy mix snapshot + per-lineage trait metadata for the observatory.
+        // Strategy mix snapshot + per-lineage trait metadata for the observatory,
+        // plus a population-weighted mean body size for the narrative.
+        let szSum = 0;
+        let cSum = 0;
         pool.forEach(([lin, count], k) => {
           const tr = traits[k]!;
           strategy[tr.descKey] = (strategy[tr.descKey] ?? 0) + count;
           poolMeta.set(lin, tr);
+          szSum += tr.size * count;
+          cSum += count;
         });
+        if (cSum > 0) meanSize = szSum / cSum;
       }
       lineagePanel.update(rows);
 
@@ -1036,6 +1047,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         energyMax: aliveCount ? maxE : 0,
         predKills: lastPredKills,
         predGain: pf[24]!,
+        meanSize,
         strategy,
       });
       if (worldSeries.length > MAX_WORLD_SAMPLES) worldSeries.shift();

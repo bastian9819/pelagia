@@ -25,7 +25,8 @@ const INPUT_SIZE: u32 = 8u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 2u;
 const WEIGHT_GENES: u32 = 112u;
-const GENOME_SIZE: u32 = 122u;
+const SIZE_GENE: u32 = 122u;
+const GENOME_SIZE: u32 = 123u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -165,4 +166,5 @@ fn main() {
   out[26] = b.w;
   out[27] = b.z;
   out[28] = activeCount; // Phase 6: how many hidden neurons are switched on
+  out[29] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
 }

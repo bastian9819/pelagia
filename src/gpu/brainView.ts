@@ -3,7 +3,7 @@
  * (sensors -> hidden -> outputs, nodes coloured by activation) plus live stats.
  * Read-back layout: [0..7] inputs, [8..17] hidden, [18..19] outputs, [20] x,
  * [21] y, [22] heading, [23] speed, [24] energy, [25] hue, [26] lineage,
- * [27] alive, [28] active hidden-neuron count.
+ * [27] alive, [28] active hidden-neuron count, [29] body size.
  */
 import { t, onLang } from './i18n.js';
 import { HIDDEN_SIZE } from '../sim/brain.js';
@@ -156,6 +156,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       const lineage = Math.round(d[26]!);
       const alive = d[27]! >= 0.5;
       const neurons = Math.round(d[28]!);
+      const bodySize = d[29]!;
       draw(inputs, hidden, outputs);
       const turn = outputs[0]!;
       const thrust = (outputs[1]! + 1) / 2;
@@ -165,7 +166,8 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
         `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${hueCss};margin-right:6px"></span>` +
         `${t('lineageWord')} #${lineage}${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>` +
         `<div>${t('energyWord')} ${energy.toFixed(1)} · ${t('speedWord')} ${speed.toFixed(1)} · ` +
-        `${t('neurons')} ${neurons}/${HIDDEN_SIZE}</div>` +
+        `${t('sizeWord')} ${bodySize.toFixed(2)}×</div>` +
+        `<div>${t('neurons')} ${neurons}/${HIDDEN_SIZE}</div>` +
         `<div>${t('decision')}: ${t('out_turn')} ${turnTxt} · ${t('out_thrust')} ${(thrust * 100).toFixed(0)}%</div>`;
     },
   };

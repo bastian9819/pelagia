@@ -47,8 +47,16 @@ fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature regi
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
 const WEIGHT_GENES: u32 = 112u; // weights+biases; activation genes follow (one per hidden)
-const GENOME_SIZE: u32 = 122u; // WEIGHT_GENES + HIDDEN_SIZE activation genes (Phase 6)
+const SIZE_GENE: u32 = 122u; // body-size gene, after the 10 activation genes
+const GENOME_SIZE: u32 = 123u; // WEIGHT_GENES + 10 activation genes + 1 size gene (Phase 6)
+const SIZE_MIN: f32 = 0.6;
+const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;
+
+// Body-size multiplier of creature i from its size gene (gene 0 -> 1.0).
+fn creatureSize(i: u32) -> f32 {
+  return clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], SIZE_MIN, SIZE_MAX);
+}
 const TAU: f32 = 6.2831853;
 
 fn pcg(v: u32) -> u32 {

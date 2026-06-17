@@ -27,6 +27,8 @@ export interface WorldSample {
   predKills: number;
   /** Predation gain (0 = predation disabled) — drives the "active/off" wording. */
   predGain: number;
+  /** Population-weighted mean body size (Phase 6 morphology). */
+  meanSize: number;
   /** descKey -> count, sampled from the dominant pool (a strategy snapshot). */
   strategy: Record<string, number>;
 }
@@ -255,7 +257,8 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
         : t('nar_predOff');
     return (
       `${t('nar_pop')} ${cur.alive.toLocaleString()} · ${trend}. ${pred}. ` +
-      `${t('nar_strategy')}: ${strat}. ${t('nar_complexity')} ${meanN} ${t('neurons')}.`
+      `${t('nar_strategy')}: ${strat}. ${t('nar_complexity')} ${meanN} ${t('neurons')} · ` +
+      `${t('nar_size')} ${cur.meanSize.toFixed(2)}×.`
     );
   }
 

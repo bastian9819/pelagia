@@ -42,8 +42,24 @@ export const WEIGHT_GENES =
  * evolution — while the genome stays a fixed-size flat vector (GPU-friendly: every
  * brain shares one shape, no thread divergence; D-005). A zero gene means active,
  * so an all-zero genome behaves exactly as before.
+ *
+ * Phase 6 also appends ONE morphology gene — body size — after the activation
+ * genes. Size is a phenotype gene (not used by the forward pass): the GPU sim
+ * reads it for size-based predation, size-scaled metabolism/speed and the
+ * on-screen body size. It is inherited and mutated like any other gene.
  */
-export const GENOME_SIZE = WEIGHT_GENES + HIDDEN_SIZE;
+export const GENOME_SIZE = WEIGHT_GENES + HIDDEN_SIZE + 1;
+
+/** Index of the body-size gene within a genome (after the activation genes). */
+export const SIZE_GENE = WEIGHT_GENES + HIDDEN_SIZE;
+export const SIZE_MIN = 0.6;
+export const SIZE_MAX = 2.2;
+
+/** Map a raw size gene to a bounded body-size multiplier (gene 0 -> 1.0). */
+export function sizeFromGene(gene: number): number {
+  const s = 1 + 0.5 * gene;
+  return s < SIZE_MIN ? SIZE_MIN : s > SIZE_MAX ? SIZE_MAX : s;
+}
 
 /**
  * Evaluate the network whose weights start at `offset` in `weights`.

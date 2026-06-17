@@ -12,6 +12,10 @@ struct RParams {
 @group(0) @binding(0) var<uniform> R: RParams;
 @group(0) @binding(1) var<storage, read> state: array<vec4<f32>>;
 @group(0) @binding(2) var<storage, read> bio: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read> weights: array<f32>; // for the body-size gene
+
+const SIZE_GENE: u32 = 122u;
+const GENOME_SIZE: u32 = 123u;
 
 struct VSOut {
   @builtin(position) pos: vec4<f32>,
@@ -47,7 +51,9 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   let ca = cos(a);
   let sa = sin(a);
   let rl = vec2<f32>(q.x * ca - q.y * sa, q.x * sa + q.y * ca);
-  let world = vec2<f32>(s.x, s.y) + rl * R.sizeWorld;
+  // Scale the body by the evolved size gene so morphology is visible on screen.
+  let bodySize = clamp(1.0 + 0.5 * weights[ii * GENOME_SIZE + SIZE_GENE], 0.6, 2.2);
+  let world = vec2<f32>(s.x, s.y) + rl * R.sizeWorld * bodySize;
   out.pos = vec4<f32>(world.x * R.view.x + R.view.z, world.y * R.view.y + R.view.w, 0.0, 1.0);
   out.uv = q; // unrotated local coords; +y is the creature's front
   out.color = hue2rgb(b.y) * R.brightness;

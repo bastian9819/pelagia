@@ -1,5 +1,6 @@
 import type { Rng } from '../core/rng.js';
 import type { WorldConfig } from '../core/config.js';
+import { wrap } from '../core/space.js';
 import { GENOME_SIZE, randomGenome, mutateGenome } from './brain.js';
 
 /** How much an offspring's lineage hue drifts from its parent's, per birth. */
@@ -98,9 +99,10 @@ export class Population {
     this.energy[parent]! -= passed;
     this.energy[child] = passed;
 
-    // Tiny positional jitter so siblings don't perfectly overlap.
-    this.x[child] = this.x[parent]! + rng.nextRange(-2, 2);
-    this.y[child] = this.y[parent]! + rng.nextRange(-2, 2);
+    // Tiny positional jitter so siblings don't perfectly overlap (wrapped, so a
+    // birth near an edge stays inside the toroidal world).
+    this.x[child] = wrap(this.x[parent]! + rng.nextRange(-2, 2), config.width);
+    this.y[child] = wrap(this.y[parent]! + rng.nextRange(-2, 2), config.height);
     this.heading[child] = rng.nextRange(0, Math.PI * 2);
     this.speed[child] = 0;
     this.age[child] = 0;

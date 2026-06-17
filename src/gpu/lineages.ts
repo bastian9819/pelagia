@@ -5,7 +5,15 @@
  * decisions made this lineage dominate?". Foraging only — aggression/predation
  * arrives in Phase 6 (creatures can't eat each other yet).
  */
-import { forward, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES } from '../sim/brain.js';
+import {
+  forward,
+  INPUT_SIZE,
+  HIDDEN_SIZE,
+  OUTPUT_SIZE,
+  WEIGHT_GENES,
+  SIZE_GENE,
+  sizeFromGene,
+} from '../sim/brain.js';
 import { t, onLang } from './i18n.js';
 
 const inp = new Float32Array(INPUT_SIZE);
@@ -50,6 +58,8 @@ export interface LineageTraits {
   aggression: number;
   /** Phase 6: how many hidden neurons this brain has switched on (0..HIDDEN_SIZE). */
   neurons: number;
+  /** Phase 6: evolved body-size multiplier. */
+  size: number;
 }
 
 /**
@@ -72,6 +82,7 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
   const aggression = (nbrLeft.turn - nbrRight.turn) / 2; // >0 turns toward neighbour
   let neurons = 0;
   for (let h = 0; h < HIDDEN_SIZE; h++) if (genome[WEIGHT_GENES + h]! >= 0) neurons++;
+  const size = sizeFromGene(genome[SIZE_GENE]!);
 
   let descKey: string;
   if (aggression > 0.35) descKey = 'desc_predator';
@@ -93,6 +104,7 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
     turnBias,
     aggression,
     neurons,
+    size,
   };
 }
 

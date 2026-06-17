@@ -25,8 +25,8 @@ describe('brain architecture', () => {
       INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE,
     );
     expect(WEIGHT_GENES).toBe(112);
-    expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE);
-    expect(GENOME_SIZE).toBe(122);
+    expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE + 1); // + body-size gene
+    expect(GENOME_SIZE).toBe(123);
   });
 });
 

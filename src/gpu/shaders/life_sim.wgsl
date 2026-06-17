@@ -14,6 +14,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (b.z < 0.5) { return; } // dead / free slot
 
   let s = state[i];
+  let size = creatureSize(i); // body size: bigger preys, but slower + costlier
   let W = P.p0.x;
   let H = P.p0.y;
   let cs = P.p0.z;
@@ -124,9 +125,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     out[o] = tanh(sum);
   }
 
-  // Move.
+  // Move. Bigger bodies have a lower top speed (prey can outrun predators).
   let heading = s.z + out[0] * P.p1.x;
-  let speed = (out[1] + 1.0) * 0.5 * P.p0.w;
+  let maxSp = P.p0.w / sqrt(size);
+  let speed = (out[1] + 1.0) * 0.5 * maxSp;
   let nx = wrapf(s.x + cos(heading) * speed * P.p1.y, W);
   let ny = wrapf(s.y + sin(heading) * speed * P.p1.y, H);
   state[i] = vec4<f32>(nx, ny, heading, speed);
@@ -148,29 +150,29 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
   }
 
-  // Prey on the nearest neighbour if we're enough bigger and in contact. The
-  // energy margin makes mutual predation impossible (can't both be 1.25x bigger),
-  // so a single atomic claim per prey is enough; the predator credits ITS OWN
-  // energy here and the prey is freed in the death pass (race-free).
+  // Prey on the nearest neighbour if we're enough BIGGER (by body size) and in
+  // contact. The size margin makes mutual predation impossible (can't both be
+  // 1.25x bigger), so a single atomic claim per prey is enough; the predator
+  // credits ITS OWN energy here and the prey is freed in the death pass
+  // (race-free). Reach scales with size, so big slow hunters can still strike.
   let gain = P.ext.x;
   if (gain > 0.0 && nbrIdx != NONE) {
+    let preySize = creatureSize(nbrIdx);
+    let reach = eatR * size;
     let np = state[nbrIdx];
     let pdx = wrapDelta(np.x - nx, W);
     let pdy = wrapDelta(np.y - ny, H);
-    if (pdx * pdx + pdy * pdy <= eatR * eatR) {
-      let preyE = bio[nbrIdx].x;
-      if (energy > preyE * P.ext.y) { // predation margin (god-tunable, >= 1)
-        let claim = atomicCompareExchangeWeak(&gridData[eatenIdx(nbrIdx)], 0u, i + 1u);
-        if (claim.exchanged) {
-          energy = energy + gain * max(0.0, preyE);
-          atomicAdd(&gridData[predCountIdx()], 1u);
-        }
+    if (pdx * pdx + pdy * pdy <= reach * reach && size > preySize * P.ext.y) {
+      let claim = atomicCompareExchangeWeak(&gridData[eatenIdx(nbrIdx)], 0u, i + 1u);
+      if (claim.exchanged) {
+        energy = energy + gain * max(0.0, bio[nbrIdx].x);
+        atomicAdd(&gridData[predCountIdx()], 1u);
       }
     }
   }
 
-  // Metabolise.
-  energy = energy - (P.p2.x + P.p2.y * speed);
+  // Metabolise. Bigger bodies cost more just to stay alive (size's downside).
+  energy = energy - (P.p2.x * size + P.p2.y * speed);
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
