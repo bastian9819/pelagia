@@ -55,14 +55,33 @@ fn parentIdx(k: u32) -> u32 { return P.d0.z * 2u + 4u + P.d1.x + P.d0.w + k; } /
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
-const WEIGHT_GENES: u32 = 193u; // weights+biases (15 in, 3 out); activation genes follow (one per hidden)
-const SIZE_GENE: u32 = 203u; // body-size gene, after the 10 activation genes
-const ELONG_GENE: u32 = 204u; // elongation (eel <-> blob)
-const FIN_GENE: u32 = 205u; // tail filament (cosmetic)
-const GLOW_GENE: u32 = 206u; // bioluminescence brightness
-const THERMAL_GENE: u32 = 207u; // preferred water temperature [-1,1]
-const TOXIN_GENE: u32 = 208u; // toxicity [0,1] (poisons predators that eat it)
-const GENOME_SIZE: u32 = 209u; // WEIGHT_GENES + 10 activation + size/elong/fin/glow/thermal/toxin
+const WEIGHT_GENES: u32 = 213u; // weights+biases (17 in, 3 out); activation genes follow (one per hidden)
+const SIZE_GENE: u32 = 223u; // body-size gene, after the 10 activation genes
+const ELONG_GENE: u32 = 224u; // elongation (eel <-> blob)
+const FIN_GENE: u32 = 225u; // tail filament (cosmetic)
+const GLOW_GENE: u32 = 226u; // bioluminescence brightness
+const THERMAL_GENE: u32 = 227u; // preferred water temperature [-1,1]
+const TOXIN_GENE: u32 = 228u; // toxicity [0,1] (poisons predators that eat it)
+const GENOME_SIZE: u32 = 229u; // WEIGHT_GENES + 10 activation + 6 morph genes
+
+// Pheromone field: a fine PHERO_RES x PHERO_RES grid packed into gridData after the
+// parent-lineage region. Every creature deposits into its cell; the field decays
+// each tick (pheroDecay); creatures sense the local gradient and follow trails →
+// stigmergy / collective paths. Stored as fixed-point u32 (deposit/decay integer).
+const PHERO_RES: u32 = 128u;
+fn pheroBase() -> u32 { return 2u * P.d0.z + 4u + P.d1.x + 2u * P.d0.w; }
+fn pheroCellIdx(x: f32, y: f32) -> u32 {
+  let fx = min(u32(clamp(x / P.p0.x, 0.0, 0.99999) * f32(PHERO_RES)), PHERO_RES - 1u);
+  let fy = min(u32(clamp(y / P.p0.y, 0.0, 0.99999) * f32(PHERO_RES)), PHERO_RES - 1u);
+  return pheroBase() + fy * PHERO_RES + fx;
+}
+// Pheromone level at fine-grid cell (fx,fy), wrapped toroidally, as f32.
+fn pheroLevel(fx: i32, fy: i32) -> f32 {
+  let r = i32(PHERO_RES);
+  let wx = u32(((fx % r) + r) % r);
+  let wy = u32(((fy % r) + r) % r);
+  return f32(atomicLoad(&gridData[pheroBase() + wy * PHERO_RES + wx]));
+}
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;

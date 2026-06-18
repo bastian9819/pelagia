@@ -1,10 +1,10 @@
 /**
  * Brain inspector: the selected creature's neural network firing in real time
  * (sensors -> hidden -> outputs, nodes coloured by activation) plus live stats.
- * Read-back layout: [0..14] inputs (15), [15..24] hidden, [25..27] outputs
- * (turn, thrust, attack), [28] x, [29] y, [30] heading, [31] speed, [32] energy,
- * [33] hue, [34] lineage, [35] alive, [36] active hidden-neuron count, [37] body
- * size, [38] elongation, [39] glow, [40] thermal preference, [41] toxicity.
+ * Read-back layout: [0..16] inputs (17), [17..26] hidden, [27..29] outputs
+ * (turn, thrust, attack), [30] x, [31] y, [32] heading, [33] speed, [34] energy,
+ * [35] hue, [36] lineage, [37] alive, [38] active hidden-neuron count, [39] body
+ * size, [40] elongation, [41] glow, [42] thermal preference, [43] toxicity.
  */
 import { t, onLang } from './i18n.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
@@ -31,9 +31,9 @@ const EEG_CHANNELS: {
   { key: 'bv_bigfood', color: '#ffd24a', lo: 0, hi: 1, get: (d) => d[5]! },
   { key: 'bv_nbr', color: '#ff9f43', lo: 0, hi: 1, get: (d) => d[8]! },
   { key: 'energyWord', color: '#9b8cff', lo: 0, hi: 1, get: (d) => Math.min(1, d[9]!) },
-  { key: 'out_turn', color: '#ff5aa6', lo: -1, hi: 1, get: (d) => d[25]! },
-  { key: 'out_thrust', color: '#5ad1ff', lo: 0, hi: 1, get: (d) => (d[26]! + 1) / 2 },
-  { key: 'out_attack', color: '#ff3b3b', lo: 0, hi: 1, get: (d) => Math.max(0, d[27]!) },
+  { key: 'out_turn', color: '#ff5aa6', lo: -1, hi: 1, get: (d) => d[27]! },
+  { key: 'out_thrust', color: '#5ad1ff', lo: 0, hi: 1, get: (d) => (d[28]! + 1) / 2 },
+  { key: 'out_attack', color: '#ff3b3b', lo: 0, hi: 1, get: (d) => Math.max(0, d[29]!) },
 ];
 const EEG_LEN = 160; // samples kept (one per sim tick)
 
@@ -53,6 +53,8 @@ const INPUT_KEYS = [
   'in_school',
   'in_nbrToxin',
   'in_nbrSize',
+  'in_pheroX',
+  'in_pheroY',
 ];
 const OUTPUT_KEYS = ['out_turn', 'out_thrust', 'out_attack'];
 
@@ -188,7 +190,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   // Tally which sensor each ACTIVE hidden neuron weights most strongly.
   function neuronSummary(): string {
     if (!genome) return '';
-    const groups = [0, 0, 0, 0, 0, 0, 0]; // plankton, big, neighbour, energy, speed, temp, school
+    const groups = [0, 0, 0, 0, 0, 0, 0, 0]; // plankton,big,nbr,energy,speed,temp,school,phero
     for (let h = 0; h < HIDDEN_SIZE; h++) {
       if (genome[WEIGHT_GENES + h]! < 0) continue; // disabled
       const base = h * (INPUT_SIZE + 1);
@@ -202,9 +204,9 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
         }
       }
       // prettier-ignore
-      // 13/14 (neighbour toxicity/size sense) fold into the neighbour group (2).
-      const g = bestI < 3 ? 0 : bestI < 6 ? 1 : bestI < 9 ? 2
-              : bestI === 9 ? 3 : bestI === 10 ? 4 : bestI === 11 ? 5 : bestI === 12 ? 6 : 2;
+      // 13/14 (neighbour toxicity/size) fold into the neighbour group (2); 15/16 = pheromone (7).
+      const g = bestI < 3 ? 0 : bestI < 6 ? 1 : bestI < 9 ? 2 : bestI === 9 ? 3
+              : bestI === 10 ? 4 : bestI === 11 ? 5 : bestI === 12 ? 6 : bestI < 15 ? 2 : 7;
       groups[g]!++;
     }
     const parts: string[] = [];
@@ -216,6 +218,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       t('speedWord'),
       t('tempPref'),
       t('bv_school'),
+      t('bv_phero'),
     ];
     for (let g = 0; g < labels.length; g++)
       if (groups[g]! > 0) parts.push(`${labels[g]}×${groups[g]}`);
@@ -374,20 +377,20 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     },
     update(d, frame) {
       pushTape(d, frame);
-      const inputs = Array.from(d.subarray(0, 15));
-      const hidden = Array.from(d.subarray(15, 25));
-      const outputs = Array.from(d.subarray(25, 28));
-      const speed = d[31]!;
-      const energy = d[32]!;
-      const hue = d[33]!;
-      const lineage = Math.round(d[34]!);
-      const alive = d[35]! >= 0.5;
-      const neurons = Math.round(d[36]!);
-      const bodySize = d[37]!;
-      const elong = d[38]!;
-      const glow = d[39]!;
-      const thermal = d[40]!;
-      const toxin = d[41]!;
+      const inputs = Array.from(d.subarray(0, 17));
+      const hidden = Array.from(d.subarray(17, 27));
+      const outputs = Array.from(d.subarray(27, 30));
+      const speed = d[33]!;
+      const energy = d[34]!;
+      const hue = d[35]!;
+      const lineage = Math.round(d[36]!);
+      const alive = d[37]! >= 0.5;
+      const neurons = Math.round(d[38]!);
+      const bodySize = d[39]!;
+      const elong = d[40]!;
+      const glow = d[41]!;
+      const thermal = d[42]!;
+      const toxin = d[43]!;
       const shapeTxt =
         elong > 1.15 ? t('shapeEel') : elong < 0.85 ? t('shapeBlob') : t('shapeOval');
       const thermalTxt =

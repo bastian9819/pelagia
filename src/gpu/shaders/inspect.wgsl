@@ -23,17 +23,19 @@ struct Params {
 @group(0) @binding(5) var<storage, read> cellStart: array<u32>;
 @group(0) @binding(6) var<storage, read> sortedIdx: array<u32>;
 @group(0) @binding(7) var<storage, read_write> out: array<f32>;
+@group(0) @binding(8) var<storage, read> gridDataRO: array<u32>; // pheromone field (read-only)
 
-const INPUT_SIZE: u32 = 15u;
+const INPUT_SIZE: u32 = 17u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 3u;
-const WEIGHT_GENES: u32 = 193u;
-const SIZE_GENE: u32 = 203u;
-const ELONG_GENE: u32 = 204u;
-const GLOW_GENE: u32 = 206u;
-const THERMAL_GENE: u32 = 207u;
-const TOXIN_GENE: u32 = 208u;
-const GENOME_SIZE: u32 = 209u;
+const WEIGHT_GENES: u32 = 213u;
+const SIZE_GENE: u32 = 223u;
+const ELONG_GENE: u32 = 224u;
+const GLOW_GENE: u32 = 226u;
+const THERMAL_GENE: u32 = 227u;
+const TOXIN_GENE: u32 = 228u;
+const GENOME_SIZE: u32 = 229u;
+const PHERO_RES: u32 = 128u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -41,6 +43,15 @@ fn wrapDelta(d: f32, s: f32) -> f32 {
   if (d > h) { return d - s; }
   if (d < -h) { return d + s; }
   return d;
+}
+
+// Pheromone field read (mirror of life_common; read-only, non-atomic view).
+fn pheroBaseI() -> u32 { return 2u * P.d0.z + 4u + P.d1.x + 2u * P.d0.w; }
+fn pheroLevelI(fx: i32, fy: i32) -> f32 {
+  let r = i32(PHERO_RES);
+  let wx = u32(((fx % r) + r) % r);
+  let wy = u32(((fy % r) + r) % r);
+  return f32(gridDataRO[pheroBaseI() + wy * PHERO_RES + wx]);
 }
 
 // Mirror of life_common's tempAt so the viewer shows the same temperature sensor.
@@ -162,6 +173,20 @@ fn main() {
   inp[10] = s.w / P.p0.w;
   inp[11] = tempAt(s.x, s.y, f32(P.d1.y));
   inp[12] = min(1.0, nbrCount / 10.0);
+  let pfx = i32(min(u32(clamp(s.x / W, 0.0, 0.99999) * f32(PHERO_RES)), PHERO_RES - 1u));
+  let pfy = i32(min(u32(clamp(s.y / H, 0.0, 0.99999) * f32(PHERO_RES)), PHERO_RES - 1u));
+  let gwx = pheroLevelI(pfx + 1, pfy) - pheroLevelI(pfx - 1, pfy);
+  let gwy = pheroLevelI(pfx, pfy + 1) - pheroLevelI(pfx, pfy - 1);
+  let gmag = sqrt(gwx * gwx + gwy * gwy);
+  if (gmag > 1.0) {
+    let grel = atan2(gwy, gwx) - s.z;
+    let gstr = min(1.0, gmag / 40000.0);
+    inp[15] = cos(grel) * gstr;
+    inp[16] = sin(grel) * gstr;
+  } else {
+    inp[15] = 0.0;
+    inp[16] = 0.0;
+  }
 
   var p = i * GENOME_SIZE;
   let actBase = i * GENOME_SIZE + WEIGHT_GENES;
@@ -191,24 +216,24 @@ fn main() {
     outv[o] = tanh(sum);
   }
 
-  // Write inputs(15) | hidden(10) | outputs(3) | x,y,heading,speed,energy,hue,lineage,alive
+  // Write inputs(17) | hidden(10) | outputs(3) | x,y,heading,speed,energy,hue,lineage,alive
   for (var k = 0u; k < INPUT_SIZE; k = k + 1u) { out[k] = inp[k]; }
-  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[15u + k] = hidden[k]; }
-  out[25] = outv[0];
-  out[26] = outv[1];
-  out[27] = outv[2]; // attack intent
-  out[28] = s.x;
-  out[29] = s.y;
-  out[30] = s.z;
-  out[31] = s.w;
-  out[32] = b.x;
-  out[33] = b.y;
-  out[34] = b.w;
-  out[35] = b.z;
-  out[36] = activeCount; // Phase 6: how many hidden neurons are switched on
-  out[37] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
-  out[38] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
-  out[39] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
-  out[40] = clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0); // thermal preference
-  out[41] = clamp(weights[i * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0); // toxicity
+  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[17u + k] = hidden[k]; }
+  out[27] = outv[0];
+  out[28] = outv[1];
+  out[29] = outv[2]; // attack intent
+  out[30] = s.x;
+  out[31] = s.y;
+  out[32] = s.z;
+  out[33] = s.w;
+  out[34] = b.x;
+  out[35] = b.y;
+  out[36] = b.w;
+  out[37] = b.z;
+  out[38] = activeCount; // Phase 6: how many hidden neurons are switched on
+  out[39] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
+  out[40] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
+  out[41] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
+  out[42] = clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0); // thermal preference
+  out[43] = clamp(weights[i * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0); // toxicity
 }

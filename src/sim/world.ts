@@ -213,6 +213,8 @@ export class World {
     inp[12] = 0; // school density (GPU-only sense)
     inp[13] = 0; // neighbour toxicity (GPU-only sense)
     inp[14] = 0; // neighbour relative size (GPU-only sense)
+    inp[15] = 0; // pheromone gradient x (GPU-only sense)
+    inp[16] = 0; // pheromone gradient y (GPU-only sense)
   }
 
   private seedInitialFood(): void {

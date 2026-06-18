@@ -39,6 +39,9 @@ import type { Rng } from '../core/rng.js';
  *                        (learned aposematism), not just be poisoned after eating
  *  14: neighbourSizeRel  own size minus the neighbour's, normalised — so an attack
  *                        can be an informed choice (hit smaller, non-toxic prey)
+ *  15: pheromoneGradX    egocentric x of the gradient toward stronger pheromone
+ *  16: pheromoneGradY    egocentric y — together they let creatures FOLLOW trails
+ *                        every creature lays down (stigmergy → collective paths)
  *
  * Output layout (each in [-1, 1]):
  *   0: turn          steer left/right, scaled to maxTurnRate
@@ -47,7 +50,7 @@ import type { Rng } from '../core/rng.js';
  *                    this is positive, so predation is an EVOLVED decision (a
  *                    lineage learns to hunt) rather than an automatic size rule.
  */
-export const INPUT_SIZE = 15;
+export const INPUT_SIZE = 17;
 export const HIDDEN_SIZE = 10;
 export const OUTPUT_SIZE = 3;
 

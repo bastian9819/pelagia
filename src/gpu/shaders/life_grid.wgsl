@@ -94,3 +94,13 @@ fn scatterCreatures(@builtin(global_invocation_id) gid: vec3<u32>) {
   let dst = atomicAdd(&gridData[creatureCountIdx(cellOf(s.x, s.y))], 1u);
   sortedIdx[creatureSortBase() + dst] = i;
 }
+
+// Pheromone decay: shrink every cell of the pheromone field a little each tick so
+// trails fade (one thread per fine-grid cell). Deposits happen in the sim pass.
+@compute @workgroup_size(256)
+fn pheroDecay(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let c = gid.x;
+  if (c >= PHERO_RES * PHERO_RES) { return; }
+  let idx = pheroBase() + c;
+  atomicStore(&gridData[idx], atomicLoad(&gridData[idx]) * 240u / 256u);
+}

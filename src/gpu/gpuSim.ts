@@ -91,6 +91,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const cols = Math.ceil(world / cellSize);
   const rows = Math.ceil(world / cellSize);
   const numCells = cols * rows;
+  // Pheromone field: a fine grid packed into gridData (must match PHERO_RES in
+  // life_common.wgsl). 128x128 cells over the world → trails finer than perception.
+  const PHERO_RES = 128;
+  const PHERO_CELLS = PHERO_RES * PHERO_RES;
 
   // --- Initial data (seeded: same seed -> same starting ocean) ---
   const stateData = new Float32Array(n * 4);
@@ -165,7 +169,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // freeCount in place.
   // ... + speciation counter (1) + parent-lineage pointers (n) for the family tree.
   const gridDataBuf = device.createBuffer({
-    size: (2 * numCells + 4 + f + 2 * n) * 4,
+    // ... + a PHERO_CELLS pheromone field at the very end (pheroBase in shaders).
+    size: (2 * numCells + 4 + f + 2 * n + PHERO_CELLS) * 4,
     usage: S | CS | CD,
   });
   const speciesCountOffset = (2 * numCells + 3 + f + n) * 4; // byte offset of the counter
@@ -268,6 +273,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // ext6.y sexualRate: chance a birth is recombined from two parents (crossover)
   // instead of a clone (0 = fully asexual). Mixes traits across nearby lineages.
   pf[45] = 0.25;
+  // ext6.z pheroDeposit: pheromone units each creature lays per tick (0 = off).
+  pf[46] = 256;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -338,6 +345,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const pDeath = mk(cycleModule, 'death');
   const pRepro = mk(cycleModule, 'repro');
   const pRespawn = mk(cycleModule, 'foodRespawn');
+  const pPheroDecay = mk(gridModule, 'pheroDecay');
 
   // Brain inspector: its own bind group (uniform + 6 read-only + 1 storage = 7).
   const ro: GPUBufferBindingLayout = { type: 'read-only-storage' };
@@ -351,6 +359,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       { binding: 5, visibility: u, buffer: ro },
       { binding: 6, visibility: u, buffer: ro },
       { binding: 7, visibility: u, buffer: sto },
+      { binding: 8, visibility: u, buffer: ro }, // gridData (pheromone field, read-only)
     ],
   });
   const inspectPipeline = device.createComputePipeline({
@@ -368,6 +377,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       { binding: 5, resource: { buffer: cellStartBuf } },
       { binding: 6, resource: { buffer: sortedBuf } },
       { binding: 7, resource: { buffer: inspectBuf } },
+      { binding: 8, resource: { buffer: gridDataBuf } },
     ],
   });
 
@@ -400,16 +410,20 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     pass.dispatchWorkgroups(wgN);
     pass.setPipeline(pRespawn);
     pass.dispatchWorkgroups(wgF);
+    pass.setPipeline(pPheroDecay);
+    pass.dispatchWorkgroups(Math.ceil(PHERO_CELLS / 256));
     pass.end();
   }
 
   // --- Render: HDR accumulation texture -> trails + glow -> tonemapped present ---
-  const renderUbo = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | CD });
-  const renderData = new Float32Array(16);
+  const renderUbo = device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | CD });
+  const renderData = new Float32Array(20);
   renderData[11] = world; // world size (for the present pass's thermal-field tint)
+  renderData[16] = 2 * numCells + 4 + f + 2 * n; // pheroBase (u32 index into gridData)
   let fieldTint = 0; // 0 = off; the "fields" toggle sets a faint tint strength
   let lockOn = false; // camera follows the selected creature when on
   let currentViz = false; // draw animated current streaks when on
+  let pheroViz = false; // draw the pheromone field (trails) when on
   renderData[7] = Math.floor(f * pf[32]); // big-food slot count (tracks g_bigFoodAmt)
   // renderData[8] = highlighted lineage id, [9] = highlight on (1/0).
   let highlightOn = false;
@@ -487,6 +501,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         { binding: 0, resource: sampler },
         { binding: 1, resource: accumView },
         { binding: 2, resource: { buffer: renderUbo } },
+        { binding: 3, resource: { buffer: gridDataBuf } },
       ],
     });
     // Clear the fresh accumulation texture once.
@@ -883,8 +898,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function positionRing(d: Float32Array): void {
     const ppw = ppwNow();
     const dpr = canvas.width / window.innerWidth;
-    ring.style.left = `${((d[28]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
-    ring.style.top = `${((d[29]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
+    ring.style.left = `${((d[30]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
+    ring.style.top = `${((d[31]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
     const px = Math.max(18, (renderData[4]! * ppw * 2) / dpr + 10);
     ring.style.width = `${px}px`;
     ring.style.height = `${px}px`;
@@ -948,6 +963,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_world', labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01 },
     { group: 'cat_world', labelKey: 'g_eatRange', idx: 6, min: 2, max: 24, step: 1 },
     { group: 'cat_world', labelKey: 'g_current', idx: 35, min: 0, max: 2, step: 0.05 },
+    { group: 'cat_world', labelKey: 'g_phero', idx: 46, min: 0, max: 1024, step: 32 },
     // Food
     { group: 'cat_food', labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1 },
     { group: 'cat_food', labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
@@ -1256,6 +1272,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   onLang(relabelCurrent);
   ui.addTool(currentBtn);
 
+  // "Show pheromones": reveal the trails creatures lay down as glowing green paths.
+  const pheroBtn = mkBtn('', () => {
+    pheroViz = !pheroViz;
+    relabelPhero();
+  });
+  function relabelPhero(): void {
+    pheroBtn.textContent = (pheroViz ? '🟢 ' : '○ ') + t('showPheromones');
+  }
+  relabelPhero();
+  onLang(relabelPhero);
+  ui.addTool(pheroBtn);
+
   function addWatch(id: number, lineage: number): void {
     if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
     watched.set(id, { id, lineage, hue: floatFromU32(pcgHash(lineage)), history: [] });
@@ -1326,14 +1354,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const w = watched.get(id);
         if (!w) return;
         const o = k * INSPECT_FLOATS;
-        const sameLineage = Math.round(d[o + 34]!) === w.lineage;
+        const sameLineage = Math.round(d[o + 36]!) === w.lineage;
         const sample: WatchSample = {
           tick: frame,
-          energy: d[o + 32]!,
-          speed: d[o + 31]!,
-          turn: d[o + 25]!,
-          thrust: (d[o + 26]! + 1) / 2,
-          alive: d[o + 35]! >= 0.5 && sameLineage,
+          energy: d[o + 34]!,
+          speed: d[o + 33]!,
+          turn: d[o + 27]!,
+          thrust: (d[o + 28]! + 1) / 2,
+          alive: d[o + 37]! >= 0.5 && sameLineage,
         };
         w.history.push(sample);
         if (w.history.length > MAX_WORLD_SAMPLES) w.history.shift();
@@ -1782,6 +1810,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     renderData[12] = frame; // for the present pass's tempAt drift
     renderData[13] = pf[35]!; // current strength (for the flow-streak reveal)
     renderData[14] = currentViz ? 1 : 0; // current-streak overlay on/off
+    renderData[17] = pheroViz ? 1 : 0; // pheromone-field overlay on/off
     device.queue.writeBuffer(renderUbo, 0, renderData);
 
     // Render every frame (so trails keep fading even while paused).
@@ -1830,13 +1859,13 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         inspectReadback.unmap();
         inspectPending = false;
         if (selectedIndex < 0) return;
-        const alive = d[35]! >= 0.5;
-        const sameLineage = Math.round(d[34]!) === selectedLineage;
+        const alive = d[37]! >= 0.5;
+        const sameLineage = Math.round(d[36]!) === selectedLineage;
         if (alive && sameLineage) {
           brainView.update(d, inspectFrame);
           if (lockOn) {
-            cam.cx = d[28]!; // creature world x
-            cam.cy = d[29]!; // creature world y
+            cam.cx = d[30]!; // creature world x
+            cam.cy = d[31]!; // creature world y
             clampCam();
             updateView();
           }

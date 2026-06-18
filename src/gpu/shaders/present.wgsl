@@ -10,8 +10,11 @@ struct RParams {
   a: vec4<f32>,    // sizeWorld, brightness, colorMode, bigCount
   b: vec4<f32>,    // hl.x, hl.y, fieldTint (0 = off), world
   c: vec4<f32>,    // frame, currentStrength, currentViz (0 = off), _
+  e: vec4<f32>,    // pheroBase, pheroViz (0 = off), _, _
 };
 @group(0) @binding(2) var<uniform> R: RParams;
+@group(0) @binding(3) var<storage, read> gridDataRO: array<u32>; // pheromone field
+const PHERO_RES_P: u32 = 128u;
 
 // Ocean current at a world position (mirror of life_common's currentAt) so the
 // flow can be drawn as animated streaks.
@@ -80,6 +83,19 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
     let along = (wx * dir.x + wy * dir.y) * 0.06 - R.c.x * 0.05;
     let streak = smoothstep(0.55, 1.0, sin(along * 6.2831853));
     col = col + vec3<f32>(0.16, 0.55, 0.75) * streak * mag * R.c.y * 0.16;
+  }
+  // Pheromone reveal: the trails creatures lay glow as faint green paths.
+  if (R.e.y > 0.0) {
+    let clipx = in.uv.x * 2.0 - 1.0;
+    let clipy = 1.0 - in.uv.y * 2.0;
+    let wx = (clipx - R.view.z) / R.view.x;
+    let wy = (clipy - R.view.w) / R.view.y;
+    let world = R.b.w;
+    let fx = u32(clamp(wx / world, 0.0, 0.99999) * f32(PHERO_RES_P));
+    let fy = u32(clamp(wy / world, 0.0, 0.99999) * f32(PHERO_RES_P));
+    let lvl = f32(gridDataRO[u32(R.e.x) + fy * PHERO_RES_P + fx]);
+    let p = clamp(lvl / 60000.0, 0.0, 1.0);
+    col = col + vec3<f32>(0.10, 0.45, 0.20) * p;
   }
   return vec4<f32>(col, 1.0);
 }

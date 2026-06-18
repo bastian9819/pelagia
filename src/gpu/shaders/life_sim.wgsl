@@ -2,7 +2,7 @@
 // brain -> move -> eat food (atomic claim) -> prey on a smaller neighbour
 // (atomic claim) -> metabolise. Only alive creatures act.
 
-const INPUT_SIZE: u32 = 15u;
+const INPUT_SIZE: u32 = 17u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 3u;
 
@@ -127,6 +127,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let localTemp = tempAt(s.x, s.y, f32(P.d1.y));
   inp[11] = localTemp; // local water temperature (cold..warm)
   inp[12] = min(1.0, nbrCount / 10.0); // school density (0..1)
+  // Pheromone gradient (egocentric): direction toward the stronger trail, with the
+  // magnitude encoding trail strength — lets a brain follow the paths creatures lay.
+  let pfx = i32(min(u32(clamp(s.x / W, 0.0, 0.99999) * f32(PHERO_RES)), PHERO_RES - 1u));
+  let pfy = i32(min(u32(clamp(s.y / H, 0.0, 0.99999) * f32(PHERO_RES)), PHERO_RES - 1u));
+  let gwx = pheroLevel(pfx + 1, pfy) - pheroLevel(pfx - 1, pfy);
+  let gwy = pheroLevel(pfx, pfy + 1) - pheroLevel(pfx, pfy - 1);
+  let gmag = sqrt(gwx * gwx + gwy * gwy);
+  if (gmag > 1.0) {
+    let grel = atan2(gwy, gwx) - s.z;
+    let gstr = min(1.0, gmag / 40000.0);
+    inp[15] = cos(grel) * gstr;
+    inp[16] = sin(grel) * gstr;
+  } else {
+    inp[15] = 0.0;
+    inp[16] = 0.0;
+  }
 
   // For eating, target the single nearest pellet of either type.
   var bestIdx = NONE;
@@ -273,6 +289,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
+
+  // Lay down pheromone at the new position (ext6.z deposit amount; 0 = off). Every
+  // creature marks its trail; the field decays each tick (pheroDecay pass).
+  let dep = u32(max(0.0, P.ext6.z));
+  if (dep > 0u) { atomicAdd(&gridData[pheroCellIdx(nx, ny)], dep); }
 
   // Mutagen brush: perturb a few of this creature's genes each tick, so dragging
   // it over a region rapidly mutates those lineages (directed evolution by hand).
