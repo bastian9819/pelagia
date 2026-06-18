@@ -130,6 +130,10 @@ const S: Dict = {
   },
   tool_repel: { en: 'repel — drag to scatter creatures', es: 'espantar — arrastra para dispersar' },
   tool_food: { en: 'feed — drag to drop food', es: 'alimentar — arrastra para soltar comida' },
+  tool_seed: {
+    en: 'seed — drop creatures (clones the selected brain, else random)',
+    es: 'sembrar — suelta criaturas (clona el cerebro seleccionado, o aleatorio)',
+  },
   tool_smite: {
     en: 'cataclysm — drag to wipe out creatures',
     es: 'cataclismo — arrastra para aniquilar',
@@ -227,7 +231,9 @@ const S: Dict = {
       'any creatures you track.<br>' +
       '• <b>🎨 Colour</b> the ocean by a trait (size, neurons, energy…) to watch evolution ' +
       'sweep across it; <b>⏭ step</b> one tick and <b>0.1×</b> slow-mo to study a decision.<br>' +
-      '• <b>Drag</b> to pan, <b>scroll</b> to zoom, <b>space</b> to pause.',
+      '• <b>Brush tools</b> (bottom-left): drag over the ocean to attract 🧲, repel 💨, ' +
+      'feed 🍤, smite ☄️ or seed 🌱 new creatures — a hand of god.<br>' +
+      '• <b>Drag</b> to pan, <b>scroll</b> to zoom, <b>space</b> to pause, <b>H</b> to hide the UI.',
     es:
       '<b>PELAGIA</b> es un océano de vida artificial. Cada mota es una criatura con una ' +
       '<b>red neuronal real</b> — nadie programó su comportamiento. Percibe su entorno, ' +
@@ -253,7 +259,10 @@ const S: Dict = {
       '• <b>🎨 Colorea</b> el océano por un rasgo (tamaño, neuronas, energía…) para ver la ' +
       'evolución recorrerlo; <b>⏭ paso</b> a paso y cámara lenta <b>0.1×</b> para estudiar una ' +
       'decisión.<br>' +
-      '• <b>Arrastra</b> para mover, <b>rueda</b> para zoom, <b>espacio</b> para pausar.',
+      '• <b>Pinceles</b> (abajo-izquierda): arrastra sobre el océano para atraer 🧲, espantar ' +
+      '💨, alimentar 🍤, aniquilar ☄️ o sembrar 🌱 criaturas — una mano de dios.<br>' +
+      '• <b>Arrastra</b> para mover, <b>rueda</b> para zoom, <b>espacio</b> para pausar, ' +
+      '<b>H</b> para ocultar la interfaz.',
   },
 };
 

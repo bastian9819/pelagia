@@ -16,6 +16,7 @@ import {
   FIN_GENE,
   GLOW_GENE,
   THERMAL_GENE,
+  randomGenome,
 } from '../sim/brain.js';
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
@@ -551,7 +552,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // (normal pan + select). The force tools drive ext5/ext6 in the sim shader; the
   // food tool scatters pellets into a rolling block of slots around the cursor. ---
   const BRUSH = { tool: 0, radius: 130, strength: 2.5 };
-  const SHADER_MODE = [0, 1, 2, 0, 4]; // none, attract, repel, food(CPU), cataclysm
+  // none, attract, repel, food(CPU), cataclysm, seed(CPU). CPU tools = shader mode 0.
+  const SHADER_MODE = [0, 1, 2, 0, 4, 0];
   let painting = false;
   let brushWX = 0;
   let brushWY = 0;
@@ -580,6 +582,60 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     foodCursor = (foodCursor + count) % f;
   }
 
+  // Seed brush ("inseminate"): drop new creatures around the cursor into a rolling
+  // block of slots. Clones the SELECTED creature's brain if one is selected (spread
+  // its lineage), else a fresh random brain in a brand-new lineage. Writes state +
+  // bio + genome directly (a god tool; seeded creatures may be ephemeral if the GPU
+  // later reclaims a reactivated free slot — acceptable for a sandbox).
+  let seedGenome: Float32Array | null = null;
+  const SEED_COUNT = 6;
+  const seedState = new Float32Array(SEED_COUNT * 4);
+  const seedBio = new Float32Array(SEED_COUNT * 4);
+  const seedWeights = new Float32Array(SEED_COUNT * GENOME_SIZE);
+  const strokeGenome = new Float32Array(GENOME_SIZE);
+  let seedCursor = 0;
+  let seedLineageCounter = 0;
+  let strokeLineage = 0;
+  let strokeHue = 0;
+  function beginSeedStroke(): void {
+    if (seedGenome) {
+      strokeGenome.set(seedGenome);
+      strokeLineage = selectedLineage; // clones join the selected lineage
+    } else {
+      const rng = new Rng((Math.random() * 0xffffffff) >>> 0, 7);
+      randomGenome(strokeGenome, 0, rng, cfg.weightInitStd);
+      strokeLineage = 2_000_000 + seedLineageCounter++; // fresh clade, no id collision
+    }
+    strokeHue = floatFromU32(pcgHash(strokeLineage >>> 0));
+  }
+  function paintSeed(): void {
+    for (let k = 0; k < SEED_COUNT; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.sqrt(Math.random()) * BRUSH.radius;
+      seedState[k * 4] = wrapWorld(brushWX + Math.cos(a) * rr);
+      seedState[k * 4 + 1] = wrapWorld(brushWY + Math.sin(a) * rr);
+      seedState[k * 4 + 2] = Math.random() * Math.PI * 2; // heading
+      seedState[k * 4 + 3] = 0; // speed
+      seedBio[k * 4] = pf[11]!; // initial energy
+      seedBio[k * 4 + 1] = strokeHue;
+      seedBio[k * 4 + 2] = 1; // alive
+      seedBio[k * 4 + 3] = strokeLineage;
+      seedWeights.set(strokeGenome, k * GENOME_SIZE);
+    }
+    const start = seedCursor % n;
+    const count = Math.min(SEED_COUNT, n - start);
+    device.queue.writeBuffer(stateBuf, start * 16, seedState, 0, count * 4);
+    device.queue.writeBuffer(bioBuf, start * 16, seedBio, 0, count * 4);
+    device.queue.writeBuffer(
+      weightsBuf,
+      start * GENOME_SIZE * 4,
+      seedWeights,
+      0,
+      count * GENOME_SIZE,
+    );
+    seedCursor = (seedCursor + count) % n;
+  }
+
   let dragging = false;
   let dragMoved = false;
   let lastX = 0;
@@ -597,6 +653,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       brushWY = wy;
       writeBrushParams();
       if (BRUSH.tool === 3) paintFood();
+      else if (BRUSH.tool === 5) {
+        beginSeedStroke();
+        paintSeed();
+      }
       return;
     }
     dragging = true;
@@ -611,6 +671,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       brushWY = wy;
       writeBrushParams();
       if (BRUSH.tool === 3) paintFood();
+      else if (BRUSH.tool === 5) paintSeed();
       return;
     }
     if (!dragging) return;
@@ -650,6 +711,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { tool: 1, icon: '🧲', key: 'tool_attract' },
     { tool: 2, icon: '💨', key: 'tool_repel' },
     { tool: 3, icon: '🍤', key: 'tool_food' },
+    { tool: 5, icon: '🌱', key: 'tool_seed' },
     { tool: 4, icon: '☄️', key: 'tool_smite' },
   ];
   const brushBtns: { b: HTMLButtonElement; def: (typeof brushTools)[number] }[] = [];
@@ -690,6 +752,27 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   onLang(() => {
     for (const { b, def } of brushBtns) b.title = t(def.key);
     sizeInput.title = t('tool_size');
+  });
+
+  // Photo mode: press H to hide every overlay (all body children but the canvas)
+  // for a clean screenshot; press again to restore.
+  let photoMode = false;
+  const photoSaved: { el: HTMLElement; display: string }[] = [];
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyH' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+    photoMode = !photoMode;
+    if (photoMode) {
+      for (const el of Array.from(document.body.children)) {
+        if (el === canvas || !(el instanceof HTMLElement) || el.style.display === 'none') continue;
+        photoSaved.push({ el, display: el.style.display });
+        el.style.display = 'none';
+      }
+    } else {
+      for (const { el, display } of photoSaved) el.style.display = display;
+      photoSaved.length = 0;
+    }
   });
 
   // --- Colour-by-trait: how creatures are tinted (renderData[6]); button lives
@@ -763,6 +846,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     applyHighlight();
     brainView.hide();
     brainView.setGenome(null);
+    seedGenome = null; // nothing to clone with the seed brush
     ring.style.display = 'none';
   }
   // Read one creature's genome back (static per creature) for the policy view.
@@ -778,7 +862,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     const g = new Float32Array(gRead.getMappedRange().slice(0));
     gRead.unmap();
     gRead.destroy();
-    if (selectedIndex === index && selectedLineage === lineage) brainView.setGenome(g);
+    if (selectedIndex === index && selectedLineage === lineage) {
+      brainView.setGenome(g);
+      seedGenome = g; // the seed brush can clone this brain ("inseminate")
+    }
   }
   function positionRing(d: Float32Array): void {
     const ppw = ppwNow();
