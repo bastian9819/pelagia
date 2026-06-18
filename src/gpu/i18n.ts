@@ -22,6 +22,7 @@ const S: Dict = {
   highlight: { en: 'highlight lineage', es: 'resaltar linaje' },
   showFields: { en: 'show biomes', es: 'mostrar biomas' },
   followCam: { en: 'follow camera', es: 'seguir cámara' },
+  showCurrents: { en: 'show currents', es: 'mostrar corrientes' },
   observatory: { en: 'observatory', es: 'observatorio' },
   ph_history: { en: 'history', es: 'historia' },
   ph_title: { en: 'evolutionary history', es: 'historia evolutiva' },

@@ -9,9 +9,21 @@ struct RParams {
   view: vec4<f32>, // sx, sy, ox, oy (world -> clip)
   a: vec4<f32>,    // sizeWorld, brightness, colorMode, bigCount
   b: vec4<f32>,    // hl.x, hl.y, fieldTint (0 = off), world
-  c: vec4<f32>,    // frame, _, _, _
+  c: vec4<f32>,    // frame, currentStrength, currentViz (0 = off), _
 };
 @group(0) @binding(2) var<uniform> R: RParams;
+
+// Ocean current at a world position (mirror of life_common's currentAt) so the
+// flow can be drawn as animated streaks.
+fn currentAt(x: f32, y: f32, frame: f32, world: f32) -> vec2<f32> {
+  let TAU = 6.2831853;
+  let u = (x / world) * TAU;
+  let w = (y / world) * TAU;
+  let t = frame * 0.0008;
+  let vx = cos(u + t) * cos(w) + 0.5 * cos(2.0 * u - t) * cos(2.0 * w);
+  let vy = -sin(u + t) * sin(w) - 0.5 * sin(2.0 * u - t) * sin(2.0 * w);
+  return vec2<f32>(vx, vy);
+}
 
 struct VSOut {
   @builtin(position) pos: vec4<f32>,
@@ -54,6 +66,20 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
     let cold = vec3<f32>(0.04, 0.10, 0.40);
     let warm = vec3<f32>(0.50, 0.13, 0.05);
     col = col + mix(cold, warm, (temp + 1.0) * 0.5) * tint;
+  }
+  // Current reveal: animated streaks aligned with the flow field — moving bands
+  // perpendicular to the local flow direction, brighter where the current is fast.
+  if (R.c.z > 0.0 && R.c.y > 0.0) {
+    let clipx = in.uv.x * 2.0 - 1.0;
+    let clipy = 1.0 - in.uv.y * 2.0;
+    let wx = (clipx - R.view.z) / R.view.x;
+    let wy = (clipy - R.view.w) / R.view.y;
+    let flow = currentAt(wx, wy, R.c.x, R.b.w);
+    let mag = length(flow);
+    let dir = flow / max(mag, 0.001);
+    let along = (wx * dir.x + wy * dir.y) * 0.06 - R.c.x * 0.05;
+    let streak = smoothstep(0.55, 1.0, sin(along * 6.2831853));
+    col = col + vec3<f32>(0.16, 0.55, 0.75) * streak * mag * R.c.y * 0.16;
   }
   return vec4<f32>(col, 1.0);
 }

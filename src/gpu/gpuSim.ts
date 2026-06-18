@@ -401,6 +401,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   renderData[11] = world; // world size (for the present pass's thermal-field tint)
   let fieldTint = 0; // 0 = off; the "fields" toggle sets a faint tint strength
   let lockOn = false; // camera follows the selected creature when on
+  let currentViz = false; // draw animated current streaks when on
   renderData[7] = Math.floor(f * pf[32]); // big-food slot count (tracks g_bigFoodAmt)
   // renderData[8] = highlighted lineage id, [9] = highlight on (1/0).
   let highlightOn = false;
@@ -1229,6 +1230,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   onLang(relabelFollow);
   ui.addTool(followBtn);
 
+  // "Show currents": animated streaks revealing the flow field.
+  const currentBtn = mkBtn('', () => {
+    currentViz = !currentViz;
+    relabelCurrent();
+  });
+  function relabelCurrent(): void {
+    currentBtn.textContent = (currentViz ? '🌀 ' : '○ ') + t('showCurrents');
+  }
+  relabelCurrent();
+  onLang(relabelCurrent);
+  ui.addTool(currentBtn);
+
   function addWatch(id: number, lineage: number): void {
     if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
     watched.set(id, { id, lineage, hue: floatFromU32(pcgHash(lineage)), history: [] });
@@ -1753,6 +1766,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     renderData[7] = Math.floor(f * pf[32]!); // big-food count tracks the live slider
     renderData[10] = fieldTint; // thermal-field background tint (0 = off)
     renderData[12] = frame; // for the present pass's tempAt drift
+    renderData[13] = pf[35]!; // current strength (for the flow-streak reveal)
+    renderData[14] = currentViz ? 1 : 0; // current-streak overlay on/off
     device.queue.writeBuffer(renderUbo, 0, renderData);
 
     // Render every frame (so trails keep fading even while paused).
