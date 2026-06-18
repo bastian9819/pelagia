@@ -172,10 +172,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // they must cope with drift — gyres, downstream pile-ups, harder upstream foraging.
   let cur = currentAt(s.x, s.y, f32(P.d1.y)) * P.ext3.w;
   // Interactive brush — a "hand of god" the user drags over the ocean (ext5: x, y,
-  // mode, radius; ext6.x strength). 1 = attract, 2 = repel, 4 = cataclysm (lethal).
+  // mode, radius; ext6.x strength). 1 = attract, 2 = repel, 4 = cataclysm (lethal),
+  // 6 = mutagen (scrambles genomes), 7 = heal (feeds energy).
   var brushDX = 0.0;
   var brushDY = 0.0;
   var zap = false;
+  var heal = 0.0;
+  var mutateHere = false;
+  var mutFall = 0.0;
   let bmode = u32(P.ext5.z + 0.5);
   if (bmode != 0u) {
     let bx = wrapDelta(P.ext5.x - s.x, W);
@@ -187,6 +191,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       let fall = 1.0 - bd / r;
       if (bmode == 4u) {
         zap = true;
+      } else if (bmode == 6u) {
+        mutateHere = true;
+        mutFall = fall;
+      } else if (bmode == 7u) {
+        heal = fall;
       } else {
         let inv = 1.0 / max(bd, 0.001);
         let sgn = select(1.0, -1.0, bmode == 2u); // attract pulls in, repel pushes out
@@ -259,8 +268,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // predation pressure (a real trade-off rather than free defence).
   let toxinCost = 0.03 * creatureToxin(i);
   energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost + thermalCost + toxinCost);
+  energy = energy + heal * 4.0; // heal brush: feed energy to creatures under it
   if (zap) { energy = -1.0; } // cataclysm brush: instant death
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
+
+  // Mutagen brush: perturb a few of this creature's genes each tick, so dragging
+  // it over a region rapidly mutates those lineages (directed evolution by hand).
+  if (mutateHere) {
+    let gbase = i * GENOME_SIZE;
+    for (var m = 0u; m < 4u; m = m + 1u) {
+      let gi = (P.d1.y + i * 7u + m * 53u) % GENOME_SIZE;
+      weights[gbase + gi] = weights[gbase + gi] + gaussian(i * 911u + m, P.d1.y) * 0.4 * mutFall;
+    }
+  }
 }

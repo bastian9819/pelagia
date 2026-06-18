@@ -558,8 +558,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // (normal pan + select). The force tools drive ext5/ext6 in the sim shader; the
   // food tool scatters pellets into a rolling block of slots around the cursor. ---
   const BRUSH = { tool: 0, radius: 130, strength: 2.5 };
-  // none, attract, repel, food(CPU), cataclysm, seed(CPU). CPU tools = shader mode 0.
-  const SHADER_MODE = [0, 1, 2, 0, 4, 0];
+  // none, attract, repel, food(CPU), cataclysm, seed(CPU), mutagen, heal.
+  // CPU tools (food, seed) = shader mode 0.
+  const SHADER_MODE = [0, 1, 2, 0, 4, 0, 6, 7];
   let painting = false;
   let brushWX = 0;
   let brushWY = 0;
@@ -717,7 +718,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { tool: 1, icon: '🧲', key: 'tool_attract' },
     { tool: 2, icon: '💨', key: 'tool_repel' },
     { tool: 3, icon: '🍤', key: 'tool_food' },
+    { tool: 7, icon: '✨', key: 'tool_heal' },
     { tool: 5, icon: '🌱', key: 'tool_seed' },
+    { tool: 6, icon: '☢️', key: 'tool_mutagen' },
     { tool: 4, icon: '☄️', key: 'tool_smite' },
   ];
   const brushBtns: { b: HTMLButtonElement; def: (typeof brushTools)[number] }[] = [];

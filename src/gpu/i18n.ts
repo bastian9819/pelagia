@@ -138,6 +138,14 @@ const S: Dict = {
     en: 'seed — drop creatures (clones the selected brain, else random)',
     es: 'sembrar — suelta criaturas (clona el cerebro seleccionado, o aleatorio)',
   },
+  tool_heal: {
+    en: 'heal — drag to feed energy to creatures',
+    es: 'curar — arrastra para dar energía',
+  },
+  tool_mutagen: {
+    en: 'mutagen — drag to rapidly mutate creatures (directed evolution)',
+    es: 'mutágeno — arrastra para mutar rápido (evolución dirigida)',
+  },
   tool_smite: {
     en: 'cataclysm — drag to wipe out creatures',
     es: 'cataclismo — arrastra para aniquilar',
@@ -237,7 +245,7 @@ const S: Dict = {
       '• <b>🎨 Colour</b> the ocean by a trait (size, neurons, energy…) to watch evolution ' +
       'sweep across it; <b>⏭ step</b> one tick and <b>0.1×</b> slow-mo to study a decision.<br>' +
       '• <b>Brush tools</b> (bottom-left): drag over the ocean to attract 🧲, repel 💨, ' +
-      'feed 🍤, smite ☄️ or seed 🌱 new creatures — a hand of god.<br>' +
+      'feed 🍤, heal ✨, seed 🌱, mutate ☢️ or smite ☄️ creatures — a hand of god.<br>' +
       '• <b>Drag</b> to pan, <b>scroll</b> to zoom, <b>space</b> to pause, <b>H</b> to hide the UI.',
     es:
       '<b>PELAGIA</b> es un océano de vida artificial. Cada mota es una criatura con una ' +
@@ -265,7 +273,7 @@ const S: Dict = {
       'evolución recorrerlo; <b>⏭ paso</b> a paso y cámara lenta <b>0.1×</b> para estudiar una ' +
       'decisión.<br>' +
       '• <b>Pinceles</b> (abajo-izquierda): arrastra sobre el océano para atraer 🧲, espantar ' +
-      '💨, alimentar 🍤, aniquilar ☄️ o sembrar 🌱 criaturas — una mano de dios.<br>' +
+      '💨, alimentar 🍤, curar ✨, sembrar 🌱, mutar ☢️ o aniquilar ☄️ criaturas — mano de dios.<br>' +
       '• <b>Arrastra</b> para mover, <b>rueda</b> para zoom, <b>espacio</b> para pausar, ' +
       '<b>H</b> para ocultar la interfaz.',
   },
