@@ -541,22 +541,74 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     },
     { passive: false },
   );
+
+  // --- Interactive brush ("hand of god"): with a tool selected, dragging over the
+  // ocean attracts/repels/feeds/smites creatures instead of panning. tool 0 = none
+  // (normal pan + select). The force tools drive ext5/ext6 in the sim shader; the
+  // food tool scatters pellets into a rolling block of slots around the cursor. ---
+  const BRUSH = { tool: 0, radius: 130, strength: 2.5 };
+  const SHADER_MODE = [0, 1, 2, 0, 4]; // none, attract, repel, food(CPU), cataclysm
+  let painting = false;
+  let brushWX = 0;
+  let brushWY = 0;
+  let foodCursor = 0;
+  const FOOD_BRUSH_COUNT = 32;
+  const foodBrushData = new Float32Array(FOOD_BRUSH_COUNT * 2);
+  const wrapWorld = (v: number): number => ((v % world) + world) % world;
+  function writeBrushParams(): void {
+    pf[40] = brushWX;
+    pf[41] = brushWY;
+    pf[42] = painting && BRUSH.tool !== 3 ? SHADER_MODE[BRUSH.tool]! : 0;
+    pf[43] = BRUSH.radius;
+    pf[44] = BRUSH.strength;
+    device.queue.writeBuffer(paramsBuf, 0, pbuf);
+  }
+  function paintFood(): void {
+    for (let k = 0; k < FOOD_BRUSH_COUNT; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.sqrt(Math.random()) * BRUSH.radius;
+      foodBrushData[k * 2] = wrapWorld(brushWX + Math.cos(a) * rr);
+      foodBrushData[k * 2 + 1] = wrapWorld(brushWY + Math.sin(a) * rr);
+    }
+    const start = foodCursor % f;
+    const count = Math.min(FOOD_BRUSH_COUNT, f - start);
+    device.queue.writeBuffer(foodBuf, start * 8, foodBrushData, 0, count * 2);
+    foodCursor = (foodCursor + count) % f;
+  }
+
   let dragging = false;
   let dragMoved = false;
   let lastX = 0;
   let lastY = 0;
   canvas.addEventListener('pointerdown', (e) => {
-    dragging = true;
-    dragMoved = false;
-    lastX = e.clientX;
-    lastY = e.clientY;
     try {
       canvas.setPointerCapture(e.pointerId);
     } catch {
       /* ignore (e.g. synthetic events) */
     }
+    if (BRUSH.tool !== 0) {
+      painting = true;
+      const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+      brushWX = wx;
+      brushWY = wy;
+      writeBrushParams();
+      if (BRUSH.tool === 3) paintFood();
+      return;
+    }
+    dragging = true;
+    dragMoved = false;
+    lastX = e.clientX;
+    lastY = e.clientY;
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (painting) {
+      const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+      brushWX = wx;
+      brushWY = wy;
+      writeBrushParams();
+      if (BRUSH.tool === 3) paintFood();
+      return;
+    }
     if (!dragging) return;
     if (Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY) > 4) dragMoved = true;
     const ppw = ppwNow();
@@ -569,6 +621,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     updateView();
   });
   canvas.addEventListener('pointerup', (e) => {
+    if (painting) {
+      painting = false;
+      writeBrushParams(); // mode -> 0 (forces stop)
+      return;
+    }
     dragging = false;
     if (!dragMoved) {
       const { wx, wy } = screenToWorld(e.clientX, e.clientY);
@@ -578,6 +635,58 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   resize();
   window.addEventListener('resize', resize);
+
+  // --- Brush toolbar (bottom-left): pick a tool, then drag over the ocean. ---
+  const brushBar = document.createElement('div');
+  brushBar.style.cssText =
+    'position:fixed;left:12px;bottom:16px;display:flex;gap:6px;align-items:center;z-index:6;' +
+    'padding:6px 8px;background:rgba(2,4,10,0.6);border:1px solid rgba(63,240,216,0.18);border-radius:10px;';
+  const brushTools = [
+    { tool: 0, icon: '✋', key: 'tool_pan' },
+    { tool: 1, icon: '🧲', key: 'tool_attract' },
+    { tool: 2, icon: '💨', key: 'tool_repel' },
+    { tool: 3, icon: '🍤', key: 'tool_food' },
+    { tool: 4, icon: '☄️', key: 'tool_smite' },
+  ];
+  const brushBtns: { b: HTMLButtonElement; def: (typeof brushTools)[number] }[] = [];
+  function setTool(tool: number): void {
+    BRUSH.tool = tool;
+    canvas.style.cursor = tool === 0 ? '' : 'crosshair';
+    if (tool === 0 && painting) {
+      painting = false;
+      writeBrushParams();
+    }
+    for (const { b, def } of brushBtns) {
+      const on = def.tool === tool;
+      b.style.borderColor = on ? 'rgba(63,240,216,0.9)' : 'rgba(63,240,216,0.25)';
+      b.style.background = on ? 'rgba(63,240,216,0.18)' : 'rgba(11,31,58,0.85)';
+    }
+  }
+  for (const def of brushTools) {
+    const b = mkBtn(def.icon, () => setTool(def.tool));
+    b.title = t(def.key);
+    brushBtns.push({ b, def });
+    brushBar.append(b);
+  }
+  const sizeInput = document.createElement('input');
+  sizeInput.type = 'range';
+  sizeInput.min = '40';
+  sizeInput.max = '300';
+  sizeInput.step = '10';
+  sizeInput.value = String(BRUSH.radius);
+  sizeInput.title = t('tool_size');
+  sizeInput.style.cssText = 'width:64px;accent-color:#3ff0d8;cursor:pointer;';
+  sizeInput.addEventListener('input', () => {
+    BRUSH.radius = Number(sizeInput.value);
+    if (painting) writeBrushParams();
+  });
+  brushBar.append(sizeInput);
+  document.body.appendChild(brushBar);
+  setTool(0);
+  onLang(() => {
+    for (const { b, def } of brushBtns) b.title = t(def.key);
+    sizeInput.title = t('tool_size');
+  });
 
   // --- Colour-by-trait: how creatures are tinted (renderData[6]); button lives
   // on the transport bar and is driven through this control. ---

@@ -121,6 +121,18 @@ const S: Dict = {
   neurons: { en: 'neurons', es: 'neuronas' },
   godMode: { en: 'god mode', es: 'modo dios' },
   reset: { en: 'reset', es: 'reiniciar' },
+  tool_pan: { en: 'move / select (drag to pan)', es: 'mover / seleccionar (arrastra para mover)' },
+  tool_attract: {
+    en: 'attract — drag to pull creatures in',
+    es: 'atraer — arrastra para atraer criaturas',
+  },
+  tool_repel: { en: 'repel — drag to scatter creatures', es: 'espantar — arrastra para dispersar' },
+  tool_food: { en: 'feed — drag to drop food', es: 'alimentar — arrastra para soltar comida' },
+  tool_smite: {
+    en: 'cataclysm — drag to wipe out creatures',
+    es: 'cataclismo — arrastra para aniquilar',
+  },
+  tool_size: { en: 'brush size', es: 'tamaño del pincel' },
   cat_world: { en: 'WORLD', es: 'MUNDO' },
   cat_food: { en: 'FOOD', es: 'COMIDA' },
   cat_evolution: { en: 'EVOLUTION', es: 'EVOLUCIÓN' },

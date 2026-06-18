@@ -167,8 +167,32 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Ocean current advects every creature (ext3.w strength; 0 = still water), so
   // they must cope with drift — gyres, downstream pile-ups, harder upstream foraging.
   let cur = currentAt(s.x, s.y, f32(P.d1.y)) * P.ext3.w;
-  let nx = wrapf(s.x + cos(heading) * speed * P.p1.y + cur.x, W);
-  let ny = wrapf(s.y + sin(heading) * speed * P.p1.y + cur.y, H);
+  // Interactive brush — a "hand of god" the user drags over the ocean (ext5: x, y,
+  // mode, radius; ext6.x strength). 1 = attract, 2 = repel, 4 = cataclysm (lethal).
+  var brushDX = 0.0;
+  var brushDY = 0.0;
+  var zap = false;
+  let bmode = u32(P.ext5.z + 0.5);
+  if (bmode != 0u) {
+    let bx = wrapDelta(P.ext5.x - s.x, W);
+    let by = wrapDelta(P.ext5.y - s.y, H);
+    let r = P.ext5.w;
+    let bd2 = bx * bx + by * by;
+    if (bd2 < r * r) {
+      let bd = sqrt(bd2);
+      let fall = 1.0 - bd / r;
+      if (bmode == 4u) {
+        zap = true;
+      } else {
+        let inv = 1.0 / max(bd, 0.001);
+        let sgn = select(1.0, -1.0, bmode == 2u); // attract pulls in, repel pushes out
+        brushDX = bx * inv * sgn * P.ext6.x * fall;
+        brushDY = by * inv * sgn * P.ext6.x * fall;
+      }
+    }
+  }
+  let nx = wrapf(s.x + cos(heading) * speed * P.p1.y + cur.x + brushDX, W);
+  let ny = wrapf(s.y + sin(heading) * speed * P.p1.y + cur.y + brushDY, H);
   state[i] = vec4<f32>(nx, ny, heading, speed);
 
   var energy = b.x;
@@ -225,6 +249,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // adapt to the temperature band that matches their evolved preference.
   let thermalCost = P.ext4.y * abs(localTemp - creatureThermalPref(i));
   energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost + thermalCost);
+  if (zap) { energy = -1.0; } // cataclysm brush: instant death
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
