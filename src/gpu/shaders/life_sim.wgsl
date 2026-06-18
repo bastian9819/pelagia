@@ -2,7 +2,7 @@
 // brain -> move -> eat food (atomic claim) -> prey on a smaller neighbour
 // (atomic claim) -> metabolise. Only alive creatures act.
 
-const INPUT_SIZE: u32 = 11u;
+const INPUT_SIZE: u32 = 13u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 3u;
 
@@ -34,9 +34,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var pIdx = NONE;
   var gD2 = 1.0e30; // nearest big food
   var gIdx = NONE;
-  // Nearest OTHER creature across the same 3x3 block (creature grid).
+  // Nearest OTHER creature across the same 3x3 block (creature grid) + a count of
+  // how many are within perception (school-density sense).
   var nbrD2 = 1.0e30;
   var nbrIdx = NONE;
+  var nbrCount = 0.0;
   for (var dy = -1; dy <= 1; dy = dy + 1) {
     var cy = (bcy + dy) % rows;
     if (cy < 0) { cy = cy + rows; }
@@ -73,6 +75,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           nbrD2 = d2;
           nbrIdx = nj;
         }
+        if (d2 <= cs * cs) { nbrCount = nbrCount + 1.0; }
       }
     }
   }
@@ -117,6 +120,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   inp[9] = b.x / P.p2.z; // energy / reproThreshold
   inp[10] = s.w / P.p0.w; // speed / maxSpeed
+  let localTemp = tempAt(s.x, s.y, f32(P.d1.y));
+  inp[11] = localTemp; // local water temperature (cold..warm)
+  inp[12] = min(1.0, nbrCount / 10.0); // school density (0..1)
 
   // For eating, target the single nearest pellet of either type.
   var bestIdx = NONE;
@@ -215,7 +221,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // aggression is selected against — the lunge has a price whether or not it lands.
   let glowCost = P.ext3.z * max(0.0, creatureGlow(i) - 1.0);
   let attackCost = select(0.0, P.ext4.x, attacking);
-  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost);
+  // Thermal mismatch costs energy (ext4.y contrast; 0 = no biomes), so lineages
+  // adapt to the temperature band that matches their evolved preference.
+  let thermalCost = P.ext4.y * abs(localTemp - creatureThermalPref(i));
+  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost + thermalCost);
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;

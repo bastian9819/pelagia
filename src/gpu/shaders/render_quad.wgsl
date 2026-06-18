@@ -15,13 +15,14 @@ struct RParams {
 @group(0) @binding(2) var<storage, read> bio: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read> weights: array<f32>; // genome: size + activation genes
 
-const WEIGHT_GENES: u32 = 153u;
+const WEIGHT_GENES: u32 = 173u;
 const HIDDEN_SIZE: u32 = 10u;
-const SIZE_GENE: u32 = 163u;
-const ELONG_GENE: u32 = 164u;
-const FIN_GENE: u32 = 165u;
-const GLOW_GENE: u32 = 166u;
-const GENOME_SIZE: u32 = 167u;
+const SIZE_GENE: u32 = 183u;
+const ELONG_GENE: u32 = 184u;
+const FIN_GENE: u32 = 185u;
+const GLOW_GENE: u32 = 186u;
+const THERMAL_GENE: u32 = 187u;
+const GENOME_SIZE: u32 = 188u;
 
 struct VSOut {
   @builtin(position) pos: vec4<f32>,
@@ -91,6 +92,9 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
     col = hue2rgb((1.0 - (elong - 0.5) / 1.5) * 0.66); // elongation
   } else if (mode == 6u) {
     col = hue2rgb((1.0 - (glow - 0.6) / 1.4) * 0.66); // bioluminescence
+  } else if (mode == 7u) {
+    let pref = clamp(weights[g + THERMAL_GENE], -1.0, 1.0);
+    col = hue2rgb((1.0 - (pref + 1.0) * 0.5) * 0.66); // thermal preference: cold=blue, warm=red
   }
   // Highlight mode: dim every creature that isn't in the selected lineage, so a
   // clade stands out among thousands.

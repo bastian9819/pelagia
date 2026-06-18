@@ -15,6 +15,7 @@ import {
   ELONG_GENE,
   FIN_GENE,
   GLOW_GENE,
+  THERMAL_GENE,
 } from '../sim/brain.js';
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
@@ -130,6 +131,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       weightsData[wb + ELONG_GENE] = rngWeights.nextGaussian() * 0.7;
       weightsData[wb + FIN_GENE] = rngWeights.nextGaussian() * 0.9;
       weightsData[wb + GLOW_GENE] = rngWeights.nextGaussian() * 0.7;
+      weightsData[wb + THERMAL_GENE] = rngWeights.nextGaussian() * 0.6; // thermal preference spread
     }
     for (let j = 0; j < f; j++) {
       if (j < foodInitAlive) {
@@ -166,9 +168,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const cellStartBuf = device.createBuffer({ size: 2 * (numCells + 1) * 4, usage: S });
   const sortedBuf = device.createBuffer({ size: (f + n) * 4, usage: S });
   const freeListBuf = device.createBuffer({ size: n * 4, usage: S });
-  // Brain-inspector output (one selected creature): inputs(11)|hidden(10)|
-  // outputs(2)|state(8)|activeCount|size = 33 floats; padded for alignment.
-  const INSPECT_FLOATS = 36;
+  // Brain-inspector output (one selected creature): inputs(13)|hidden(10)|
+  // outputs(3)|state(8)|activeCount|size|elong|glow|thermal = 39 floats; padded.
+  const INSPECT_FLOATS = 44;
   const inspectBuf = device.createBuffer({ size: INSPECT_FLOATS * 4, usage: S | CS });
   const inspectReadback = device.createBuffer({
     size: INSPECT_FLOATS * 4,
@@ -250,6 +252,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // ext4.x attackCost: energy spent each tick the brain's attack output is on, so
   // indiscriminate aggression is selected against (default small but non-zero).
   pf[36] = 0.04;
+  // ext4.y thermalContrast: how strongly a temperature mismatch costs energy
+  // (0 = uniform ocean / no biomes). Moderate default so biomes matter but don't
+  // wipe out mismatched zones (creatures can also swim toward their comfort band).
+  pf[37] = 0.05;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -580,6 +586,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     'speedWord',
     'elongWord',
     'glowWord',
+    'thermalWord',
   ];
   let colorMode = 0;
 
@@ -660,8 +667,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function positionRing(d: Float32Array): void {
     const ppw = ppwNow();
     const dpr = canvas.width / window.innerWidth;
-    ring.style.left = `${((d[24]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
-    ring.style.top = `${((d[25]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
+    ring.style.left = `${((d[26]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
+    ring.style.top = `${((d[27]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
     const px = Math.max(18, (renderData[4]! * ppw * 2) / dpr + 10);
     ring.style.width = `${px}px`;
     ring.style.height = `${px}px`;
@@ -743,6 +750,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_body', labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },
     { group: 'cat_body', labelKey: 'g_turnCost', idx: 31, min: 0, max: 0.2, step: 0.005 },
     { group: 'cat_body', labelKey: 'g_glowCost', idx: 34, min: 0, max: 0.2, step: 0.005 },
+    { group: 'cat_body', labelKey: 'g_thermal', idx: 37, min: 0, max: 0.2, step: 0.005 },
     // Predation
     { group: 'cat_predation', labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
     { group: 'cat_predation', labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
@@ -1062,14 +1070,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const w = watched.get(id);
         if (!w) return;
         const o = k * INSPECT_FLOATS;
-        const sameLineage = Math.round(d[o + 30]!) === w.lineage;
+        const sameLineage = Math.round(d[o + 32]!) === w.lineage;
         const sample: WatchSample = {
           tick: frame,
-          energy: d[o + 28]!,
-          speed: d[o + 27]!,
-          turn: d[o + 21]!,
-          thrust: (d[o + 22]! + 1) / 2,
-          alive: d[o + 31]! >= 0.5 && sameLineage,
+          energy: d[o + 30]!,
+          speed: d[o + 29]!,
+          turn: d[o + 23]!,
+          thrust: (d[o + 24]! + 1) / 2,
+          alive: d[o + 33]! >= 0.5 && sameLineage,
         };
         w.history.push(sample);
         if (w.history.length > MAX_WORLD_SAMPLES) w.history.shift();
@@ -1562,8 +1570,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         inspectReadback.unmap();
         inspectPending = false;
         if (selectedIndex < 0) return;
-        const alive = d[31]! >= 0.5;
-        const sameLineage = Math.round(d[30]!) === selectedLineage;
+        const alive = d[33]! >= 0.5;
+        const sameLineage = Math.round(d[32]!) === selectedLineage;
         if (alive && sameLineage) {
           brainView.update(d, inspectFrame);
           positionRing(d);

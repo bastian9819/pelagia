@@ -29,6 +29,11 @@ import type { Rng } from '../core/rng.js';
  *   8: neighborProximity
  *   9: energyNorm        own energy, normalised
  *  10: speedNorm         own speed, normalised
+ *  11: temperature       local water temperature at the creature, in [-1, 1]
+ *                        (cold..warm) — lets a lineage navigate toward the band
+ *                        that matches its evolved thermal-preference gene
+ *  12: schoolDensity     how crowded it is locally (neighbour count, normalised)
+ *                        — the raw material for schooling / dispersal behaviour
  *
  * Output layout (each in [-1, 1]):
  *   0: turn          steer left/right, scaled to maxTurnRate
@@ -37,7 +42,7 @@ import type { Rng } from '../core/rng.js';
  *                    this is positive, so predation is an EVOLVED decision (a
  *                    lineage learns to hunt) rather than an automatic size rule.
  */
-export const INPUT_SIZE = 11;
+export const INPUT_SIZE = 13;
 export const HIDDEN_SIZE = 10;
 export const OUTPUT_SIZE = 3;
 
@@ -61,13 +66,16 @@ export const WEIGHT_GENES =
  *   ELONG  elongation: streamlined eel (fast, less agile) ↔ round blob (agile)
  *   FIN    tail filament length — visual silhouette variety (neutral drift)
  *   GLOW   bioluminescence brightness (neutral drift; optional metabolic cost)
+ *   THERMAL preferred water temperature in [-1, 1] — metabolism is cheaper where
+ *           the local temperature matches it, so lineages adapt to thermal biomes
  * All are inherited and mutated like any other gene.
  */
 export const SIZE_GENE = WEIGHT_GENES + HIDDEN_SIZE;
 export const ELONG_GENE = SIZE_GENE + 1;
 export const FIN_GENE = SIZE_GENE + 2;
 export const GLOW_GENE = SIZE_GENE + 3;
-export const GENOME_SIZE = GLOW_GENE + 1;
+export const THERMAL_GENE = SIZE_GENE + 4;
+export const GENOME_SIZE = THERMAL_GENE + 1;
 
 export const SIZE_MIN = 0.6;
 export const SIZE_MAX = 2.2;

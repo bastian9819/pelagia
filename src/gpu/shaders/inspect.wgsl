@@ -24,14 +24,15 @@ struct Params {
 @group(0) @binding(6) var<storage, read> sortedIdx: array<u32>;
 @group(0) @binding(7) var<storage, read_write> out: array<f32>;
 
-const INPUT_SIZE: u32 = 11u;
+const INPUT_SIZE: u32 = 13u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 3u;
-const WEIGHT_GENES: u32 = 153u;
-const SIZE_GENE: u32 = 163u;
-const ELONG_GENE: u32 = 164u;
-const GLOW_GENE: u32 = 166u;
-const GENOME_SIZE: u32 = 167u;
+const WEIGHT_GENES: u32 = 173u;
+const SIZE_GENE: u32 = 183u;
+const ELONG_GENE: u32 = 184u;
+const GLOW_GENE: u32 = 186u;
+const THERMAL_GENE: u32 = 187u;
+const GENOME_SIZE: u32 = 188u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -39,6 +40,13 @@ fn wrapDelta(d: f32, s: f32) -> f32 {
   if (d > h) { return d - s; }
   if (d < -h) { return d + s; }
   return d;
+}
+
+// Mirror of life_common's tempAt so the viewer shows the same temperature sensor.
+fn tempAt(x: f32, y: f32, frame: f32) -> f32 {
+  let TAU = 6.2831853;
+  let drift = frame * 0.0004;
+  return clamp(0.6 * cos((y / P.p0.y) * TAU + drift) + 0.4 * sin((x / P.p0.x) * TAU), -1.0, 1.0);
 }
 
 @compute @workgroup_size(1)
@@ -64,6 +72,7 @@ fn main() {
   var gIdx = NONE;
   var nbrD2 = 1.0e30;
   var nbrIdx = NONE;
+  var nbrCount = 0.0;
   for (var dy = -1; dy <= 1; dy = dy + 1) {
     var cy = (bcy + dy) % rows;
     if (cy < 0) { cy = cy + rows; }
@@ -99,6 +108,7 @@ fn main() {
           nbrD2 = d2;
           nbrIdx = nj;
         }
+        if (d2 <= cs * cs) { nbrCount = nbrCount + 1.0; }
       }
     }
   }
@@ -143,6 +153,8 @@ fn main() {
   }
   inp[9] = b.x / P.p2.z;
   inp[10] = s.w / P.p0.w;
+  inp[11] = tempAt(s.x, s.y, f32(P.d1.y));
+  inp[12] = min(1.0, nbrCount / 10.0);
 
   var p = i * GENOME_SIZE;
   let actBase = i * GENOME_SIZE + WEIGHT_GENES;
@@ -174,20 +186,21 @@ fn main() {
 
   // Write inputs(11) | hidden(10) | outputs(3) | x,y,heading,speed,energy,hue,lineage,alive
   for (var k = 0u; k < INPUT_SIZE; k = k + 1u) { out[k] = inp[k]; }
-  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[11u + k] = hidden[k]; }
-  out[21] = outv[0];
-  out[22] = outv[1];
-  out[23] = outv[2]; // attack intent
-  out[24] = s.x;
-  out[25] = s.y;
-  out[26] = s.z;
-  out[27] = s.w;
-  out[28] = b.x;
-  out[29] = b.y;
-  out[30] = b.w;
-  out[31] = b.z;
-  out[32] = activeCount; // Phase 6: how many hidden neurons are switched on
-  out[33] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
-  out[34] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
-  out[35] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
+  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[13u + k] = hidden[k]; }
+  out[23] = outv[0];
+  out[24] = outv[1];
+  out[25] = outv[2]; // attack intent
+  out[26] = s.x;
+  out[27] = s.y;
+  out[28] = s.z;
+  out[29] = s.w;
+  out[30] = b.x;
+  out[31] = b.y;
+  out[32] = b.w;
+  out[33] = b.z;
+  out[34] = activeCount; // Phase 6: how many hidden neurons are switched on
+  out[35] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
+  out[36] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
+  out[37] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
+  out[38] = clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0); // thermal preference
 }

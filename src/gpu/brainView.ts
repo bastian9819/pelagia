@@ -1,10 +1,10 @@
 /**
  * Brain inspector: the selected creature's neural network firing in real time
  * (sensors -> hidden -> outputs, nodes coloured by activation) plus live stats.
- * Read-back layout: [0..10] inputs (11), [11..20] hidden, [21..23] outputs
- * (turn, thrust, attack), [24] x, [25] y, [26] heading, [27] speed, [28] energy,
- * [29] hue, [30] lineage, [31] alive, [32] active hidden-neuron count, [33] body
- * size, [34] elongation, [35] glow.
+ * Read-back layout: [0..12] inputs (13), [13..22] hidden, [23..25] outputs
+ * (turn, thrust, attack), [26] x, [27] y, [28] heading, [29] speed, [30] energy,
+ * [31] hue, [32] lineage, [33] alive, [34] active hidden-neuron count, [35] body
+ * size, [36] elongation, [37] glow, [38] thermal preference.
  */
 import { t, onLang } from './i18n.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
@@ -31,9 +31,9 @@ const EEG_CHANNELS: {
   { key: 'bv_bigfood', color: '#ffd24a', lo: 0, hi: 1, get: (d) => d[5]! },
   { key: 'bv_nbr', color: '#ff9f43', lo: 0, hi: 1, get: (d) => d[8]! },
   { key: 'energyWord', color: '#9b8cff', lo: 0, hi: 1, get: (d) => Math.min(1, d[9]!) },
-  { key: 'out_turn', color: '#ff5aa6', lo: -1, hi: 1, get: (d) => d[21]! },
-  { key: 'out_thrust', color: '#5ad1ff', lo: 0, hi: 1, get: (d) => (d[22]! + 1) / 2 },
-  { key: 'out_attack', color: '#ff3b3b', lo: 0, hi: 1, get: (d) => Math.max(0, d[23]!) },
+  { key: 'out_turn', color: '#ff5aa6', lo: -1, hi: 1, get: (d) => d[23]! },
+  { key: 'out_thrust', color: '#5ad1ff', lo: 0, hi: 1, get: (d) => (d[24]! + 1) / 2 },
+  { key: 'out_attack', color: '#ff3b3b', lo: 0, hi: 1, get: (d) => Math.max(0, d[25]!) },
 ];
 const EEG_LEN = 160; // samples kept (one per sim tick)
 
@@ -49,6 +49,8 @@ const INPUT_KEYS = [
   'in_nbrNear',
   'in_energy',
   'in_speed',
+  'in_temp',
+  'in_school',
 ];
 const OUTPUT_KEYS = ['out_turn', 'out_thrust', 'out_attack'];
 
@@ -184,7 +186,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   // Tally which sensor each ACTIVE hidden neuron weights most strongly.
   function neuronSummary(): string {
     if (!genome) return '';
-    const groups = [0, 0, 0, 0, 0]; // plankton, big food, neighbour, energy, speed
+    const groups = [0, 0, 0, 0, 0, 0, 0]; // plankton, big, neighbour, energy, speed, temp, school
     for (let h = 0; h < HIDDEN_SIZE; h++) {
       if (genome[WEIGHT_GENES + h]! < 0) continue; // disabled
       const base = h * (INPUT_SIZE + 1);
@@ -197,7 +199,9 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
           bestI = i;
         }
       }
-      const g = bestI < 3 ? 0 : bestI < 6 ? 1 : bestI < 9 ? 2 : bestI === 9 ? 3 : 4;
+      // prettier-ignore
+      const g = bestI < 3 ? 0 : bestI < 6 ? 1 : bestI < 9 ? 2
+              : bestI === 9 ? 3 : bestI === 10 ? 4 : bestI === 11 ? 5 : 6;
       groups[g]!++;
     }
     const parts: string[] = [];
@@ -207,8 +211,11 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       t('bv_nbr'),
       t('energyWord'),
       t('speedWord'),
+      t('tempPref'),
+      t('bv_school'),
     ];
-    for (let g = 0; g < 5; g++) if (groups[g]! > 0) parts.push(`${labels[g]}×${groups[g]}`);
+    for (let g = 0; g < labels.length; g++)
+      if (groups[g]! > 0) parts.push(`${labels[g]}×${groups[g]}`);
     return `${t('bv_listens')}: ${parts.join(' · ')}`;
   }
 
@@ -364,20 +371,23 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     },
     update(d, frame) {
       pushTape(d, frame);
-      const inputs = Array.from(d.subarray(0, 11));
-      const hidden = Array.from(d.subarray(11, 21));
-      const outputs = Array.from(d.subarray(21, 24));
-      const speed = d[27]!;
-      const energy = d[28]!;
-      const hue = d[29]!;
-      const lineage = Math.round(d[30]!);
-      const alive = d[31]! >= 0.5;
-      const neurons = Math.round(d[32]!);
-      const bodySize = d[33]!;
-      const elong = d[34]!;
-      const glow = d[35]!;
+      const inputs = Array.from(d.subarray(0, 13));
+      const hidden = Array.from(d.subarray(13, 23));
+      const outputs = Array.from(d.subarray(23, 26));
+      const speed = d[29]!;
+      const energy = d[30]!;
+      const hue = d[31]!;
+      const lineage = Math.round(d[32]!);
+      const alive = d[33]! >= 0.5;
+      const neurons = Math.round(d[34]!);
+      const bodySize = d[35]!;
+      const elong = d[36]!;
+      const glow = d[37]!;
+      const thermal = d[38]!;
       const shapeTxt =
         elong > 1.15 ? t('shapeEel') : elong < 0.85 ? t('shapeBlob') : t('shapeOval');
+      const thermalTxt =
+        thermal > 0.25 ? t('tempWarm') : thermal < -0.25 ? t('tempCold') : t('tempMild');
       draw(inputs, hidden, outputs);
       const turn = outputs[0]!;
       const thrust = (outputs[1]! + 1) / 2;
@@ -389,7 +399,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
         `${t('lineageWord')} #${lineage}${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>` +
         `<div>${t('energyWord')} ${energy.toFixed(1)} · ${t('speedWord')} ${speed.toFixed(1)} · ` +
         `${t('sizeWord')} ${bodySize.toFixed(2)}×</div>` +
-        `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}×</div>` +
+        `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}× · ${t('tempPref')} ${thermalTxt}</div>` +
         `<div>${t('neurons')} ${neurons}/${HIDDEN_SIZE}</div>` +
         `<div>${t('decision')}: ${t('out_turn')} ${turnTxt} · ${t('out_thrust')} ${(thrust * 100).toFixed(0)}%` +
         `${attack > 0 ? ` · <span style="color:#ff3b3b">${t('out_attack')} ▲</span>` : ''}</div>`;

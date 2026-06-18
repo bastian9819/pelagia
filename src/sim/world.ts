@@ -209,6 +209,8 @@ export class World {
 
     inp[9] = pop.energy[i]! / cfg.reproductionThreshold;
     inp[10] = pop.speed[i]! / cfg.maxSpeed;
+    inp[11] = 0; // temperature (GPU-only biome sense)
+    inp[12] = 0; // school density (GPU-only sense)
   }
 
   private seedInitialFood(): void {

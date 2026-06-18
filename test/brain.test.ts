@@ -24,9 +24,9 @@ describe('brain architecture', () => {
     expect(WEIGHT_GENES).toBe(
       INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE,
     );
-    expect(WEIGHT_GENES).toBe(153);
-    expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE + 4); // + size/elong/fin/glow genes
-    expect(GENOME_SIZE).toBe(167);
+    expect(WEIGHT_GENES).toBe(173);
+    expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE + 5); // + size/elong/fin/glow/thermal
+    expect(GENOME_SIZE).toBe(188);
   });
 });
 

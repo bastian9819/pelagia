@@ -55,12 +55,13 @@ fn parentIdx(k: u32) -> u32 { return P.d0.z * 2u + 4u + P.d1.x + P.d0.w + k; } /
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
-const WEIGHT_GENES: u32 = 153u; // weights+biases (11 in, 3 out); activation genes follow (one per hidden)
-const SIZE_GENE: u32 = 163u; // body-size gene, after the 10 activation genes
-const ELONG_GENE: u32 = 164u; // elongation (eel <-> blob)
-const FIN_GENE: u32 = 165u; // tail filament (cosmetic)
-const GLOW_GENE: u32 = 166u; // bioluminescence brightness
-const GENOME_SIZE: u32 = 167u; // WEIGHT_GENES + 10 activation + size + elong + fin + glow
+const WEIGHT_GENES: u32 = 173u; // weights+biases (13 in, 3 out); activation genes follow (one per hidden)
+const SIZE_GENE: u32 = 183u; // body-size gene, after the 10 activation genes
+const ELONG_GENE: u32 = 184u; // elongation (eel <-> blob)
+const FIN_GENE: u32 = 185u; // tail filament (cosmetic)
+const GLOW_GENE: u32 = 186u; // bioluminescence brightness
+const THERMAL_GENE: u32 = 187u; // preferred water temperature [-1,1]
+const GENOME_SIZE: u32 = 188u; // WEIGHT_GENES + 10 activation + size + elong + fin + glow + thermal
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;
@@ -88,6 +89,17 @@ fn currentAt(x: f32, y: f32, frame: f32) -> vec2<f32> {
   let vx = cos(u + t) * cos(w) + 0.5 * cos(2.0 * u - t) * cos(2.0 * w);
   let vy = -sin(u + t) * sin(w) - 0.5 * sin(2.0 * u - t) * sin(2.0 * w);
   return vec2<f32>(vx, vy);
+}
+// Water temperature at a world position, in [-1, 1] (cold..warm). Smooth diagonal
+// bands that drift slowly → thermal biomes. Creatures sense this and evolve a
+// thermal-preference gene; metabolism is cheaper where the two match.
+fn tempAt(x: f32, y: f32, frame: f32) -> f32 {
+  let drift = frame * 0.0004;
+  return clamp(0.6 * cos((y / P.p0.y) * TAU + drift) + 0.4 * sin((x / P.p0.x) * TAU), -1.0, 1.0);
+}
+// A creature's preferred temperature (gene clamped to [-1, 1]).
+fn creatureThermalPref(i: u32) -> f32 {
+  return clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0);
 }
 const TAU: f32 = 6.2831853;
 
