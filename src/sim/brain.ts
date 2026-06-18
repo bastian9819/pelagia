@@ -68,6 +68,8 @@ export const WEIGHT_GENES =
  *   GLOW   bioluminescence brightness (neutral drift; optional metabolic cost)
  *   THERMAL preferred water temperature in [-1, 1] — metabolism is cheaper where
  *           the local temperature matches it, so lineages adapt to thermal biomes
+ *   TOXIN  toxicity in [0, 1] — a predator that eats a toxic creature is poisoned,
+ *          so toxicity is an evolved defence (with a small metabolic cost)
  * All are inherited and mutated like any other gene.
  */
 export const SIZE_GENE = WEIGHT_GENES + HIDDEN_SIZE;
@@ -75,7 +77,8 @@ export const ELONG_GENE = SIZE_GENE + 1;
 export const FIN_GENE = SIZE_GENE + 2;
 export const GLOW_GENE = SIZE_GENE + 3;
 export const THERMAL_GENE = SIZE_GENE + 4;
-export const GENOME_SIZE = THERMAL_GENE + 1;
+export const TOXIN_GENE = SIZE_GENE + 5;
+export const GENOME_SIZE = TOXIN_GENE + 1;
 
 export const SIZE_MIN = 0.6;
 export const SIZE_MAX = 2.2;

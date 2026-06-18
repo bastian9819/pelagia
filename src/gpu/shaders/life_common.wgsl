@@ -61,7 +61,8 @@ const ELONG_GENE: u32 = 184u; // elongation (eel <-> blob)
 const FIN_GENE: u32 = 185u; // tail filament (cosmetic)
 const GLOW_GENE: u32 = 186u; // bioluminescence brightness
 const THERMAL_GENE: u32 = 187u; // preferred water temperature [-1,1]
-const GENOME_SIZE: u32 = 188u; // WEIGHT_GENES + 10 activation + size + elong + fin + glow + thermal
+const TOXIN_GENE: u32 = 188u; // toxicity [0,1] (poisons predators that eat it)
+const GENOME_SIZE: u32 = 189u; // WEIGHT_GENES + 10 activation + size/elong/fin/glow/thermal/toxin
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;
@@ -100,6 +101,10 @@ fn tempAt(x: f32, y: f32, frame: f32) -> f32 {
 // A creature's preferred temperature (gene clamped to [-1, 1]).
 fn creatureThermalPref(i: u32) -> f32 {
   return clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0);
+}
+// A creature's toxicity in [0, 1] (gene <= 0 -> non-toxic).
+fn creatureToxin(i: u32) -> f32 {
+  return clamp(weights[i * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0);
 }
 const TAU: f32 = 6.2831853;
 

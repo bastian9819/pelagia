@@ -22,7 +22,8 @@ const ELONG_GENE: u32 = 184u;
 const FIN_GENE: u32 = 185u;
 const GLOW_GENE: u32 = 186u;
 const THERMAL_GENE: u32 = 187u;
-const GENOME_SIZE: u32 = 188u;
+const TOXIN_GENE: u32 = 188u;
+const GENOME_SIZE: u32 = 189u;
 
 struct VSOut {
   @builtin(position) pos: vec4<f32>,
@@ -95,6 +96,10 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   } else if (mode == 7u) {
     let pref = clamp(weights[g + THERMAL_GENE], -1.0, 1.0);
     col = hue2rgb((1.0 - (pref + 1.0) * 0.5) * 0.66); // thermal preference: cold=blue, warm=red
+  } else if (mode == 8u) {
+    // Aposematism: toxic creatures glow warning yellow-green, harmless ones dim grey.
+    let tox = clamp(weights[g + TOXIN_GENE], 0.0, 1.0);
+    col = mix(vec3<f32>(0.18, 0.20, 0.22), vec3<f32>(0.7, 1.0, 0.1), tox);
   }
   // Highlight mode: dim every creature that isn't in the selected lineage, so a
   // clade stands out among thousands.

@@ -384,6 +384,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       const elong = d[36]!;
       const glow = d[37]!;
       const thermal = d[38]!;
+      const toxin = d[39]!;
       const shapeTxt =
         elong > 1.15 ? t('shapeEel') : elong < 0.85 ? t('shapeBlob') : t('shapeOval');
       const thermalTxt =
@@ -399,7 +400,8 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
         `${t('lineageWord')} #${lineage}${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>` +
         `<div>${t('energyWord')} ${energy.toFixed(1)} · ${t('speedWord')} ${speed.toFixed(1)} · ` +
         `${t('sizeWord')} ${bodySize.toFixed(2)}×</div>` +
-        `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}× · ${t('tempPref')} ${thermalTxt}</div>` +
+        `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}× · ${t('tempPref')} ${thermalTxt}` +
+        `${toxin > 0.05 ? ` · <span style="color:#bfff3a">${t('toxinWord')} ${(toxin * 100).toFixed(0)}%</span>` : ''}</div>` +
         `<div>${t('neurons')} ${neurons}/${HIDDEN_SIZE}</div>` +
         `<div>${t('decision')}: ${t('out_turn')} ${turnTxt} · ${t('out_thrust')} ${(thrust * 100).toFixed(0)}%` +
         `${attack > 0 ? ` · <span style="color:#ff3b3b">${t('out_attack')} ▲</span>` : ''}</div>`;

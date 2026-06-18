@@ -232,7 +232,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (pdx * pdx + pdy * pdy <= reach * reach && size > preySize * P.ext.y) {
       let claim = atomicCompareExchangeWeak(&gridData[eatenIdx(nbrIdx)], 0u, i + 1u);
       if (claim.exchanged) {
-        energy = energy + gain * max(0.0, bio[nbrIdx].x);
+        // Gain the prey's energy, but a TOXIC prey poisons the predator (ext4.w
+        // potency) — so toxicity is an evolved defence and eating the wrong prey
+        // can be a net loss.
+        energy = energy + gain * max(0.0, bio[nbrIdx].x) - P.ext4.w * creatureToxin(nbrIdx);
         atomicAdd(&gridData[predCountIdx()], 1u);
       }
     }
@@ -248,7 +251,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Thermal mismatch costs energy (ext4.y contrast; 0 = no biomes), so lineages
   // adapt to the temperature band that matches their evolved preference.
   let thermalCost = P.ext4.y * abs(localTemp - creatureThermalPref(i));
-  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost + thermalCost);
+  // Producing poison costs a little energy, so toxicity only pays off under
+  // predation pressure (a real trade-off rather than free defence).
+  let toxinCost = 0.03 * creatureToxin(i);
+  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost + thermalCost + toxinCost);
   if (zap) { energy = -1.0; } // cataclysm brush: instant death
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.

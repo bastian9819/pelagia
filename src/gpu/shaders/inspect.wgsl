@@ -32,7 +32,8 @@ const SIZE_GENE: u32 = 183u;
 const ELONG_GENE: u32 = 184u;
 const GLOW_GENE: u32 = 186u;
 const THERMAL_GENE: u32 = 187u;
-const GENOME_SIZE: u32 = 188u;
+const TOXIN_GENE: u32 = 188u;
+const GENOME_SIZE: u32 = 189u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -203,4 +204,5 @@ fn main() {
   out[36] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
   out[37] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
   out[38] = clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0); // thermal preference
+  out[39] = clamp(weights[i * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0); // toxicity
 }

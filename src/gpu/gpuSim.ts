@@ -16,6 +16,7 @@ import {
   FIN_GENE,
   GLOW_GENE,
   THERMAL_GENE,
+  TOXIN_GENE,
   randomGenome,
 } from '../sim/brain.js';
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
@@ -133,6 +134,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       weightsData[wb + FIN_GENE] = rngWeights.nextGaussian() * 0.9;
       weightsData[wb + GLOW_GENE] = rngWeights.nextGaussian() * 0.7;
       weightsData[wb + THERMAL_GENE] = rngWeights.nextGaussian() * 0.6; // thermal preference spread
+      // Toxicity: biased low (most creatures harmless; a toxic minority can evolve).
+      weightsData[wb + TOXIN_GENE] = rngWeights.nextGaussian() * 0.35 - 0.15;
     }
     for (let j = 0; j < f; j++) {
       if (j < foodInitAlive) {
@@ -260,6 +263,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // ext4.z carrionAmount: chance a dead creature drops a food pellet where it fell
   // (0 = off). Feeds scavengers; bounded by one pellet per food slot.
   pf[38] = 0.3;
+  // ext4.w toxinPotency: energy a predator loses per unit of prey toxicity (0 = off).
+  pf[39] = 15;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -787,6 +792,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     'elongWord',
     'glowWord',
     'thermalWord',
+    'toxinWord',
   ];
   let colorMode = 0;
 
@@ -960,6 +966,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_predation', labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
     { group: 'cat_predation', labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
     { group: 'cat_predation', labelKey: 'g_attackCost', idx: 36, min: 0, max: 0.2, step: 0.005 },
+    { group: 'cat_predation', labelKey: 'g_toxin', idx: 39, min: 0, max: 50, step: 1 },
     // Cycle
     { group: 'cat_cycle', labelKey: 'g_dayNight', idx: 28, min: 0, max: 0.85, step: 0.05 },
     { group: 'cat_cycle', labelKey: 'g_dayLength', idx: 29, min: 400, max: 4000, step: 100 },
