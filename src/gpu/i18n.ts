@@ -135,6 +135,7 @@ const S: Dict = {
   g_attackCost: { en: 'attack cost', es: 'coste de ataque' },
   g_thermal: { en: 'thermal biomes', es: 'biomas térmicos' },
   g_bigFoodAmt: { en: 'big-food amount', es: 'cantidad comida grande' },
+  g_carrion: { en: 'carrion', es: 'carroña' },
   g_offspringSpread: { en: 'offspring spread', es: 'dispersión de cría' },
   // God-mode mechanism toggles, scenario presets and the random-world dice.
   mechanisms: { en: 'mechanisms', es: 'mecanismos' },
@@ -143,6 +144,7 @@ const S: Dict = {
   tog_speciation: { en: 'speciation', es: 'especiación' },
   tog_bigfood: { en: 'big food', es: 'comida grande' },
   tog_current: { en: 'current', es: 'corriente' },
+  tog_carrion: { en: 'carrion', es: 'carroña' },
   tog_glow: { en: 'glow', es: 'brillo' },
   scenarios: { en: 'scenarios', es: 'escenarios' },
   pre_eden: { en: '🌿 Eden', es: '🌿 Edén' },

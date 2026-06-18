@@ -16,6 +16,14 @@ fn death(@builtin(global_invocation_id) gid: vec3<u32>) {
     b.z = 0.0;
     b.x = 0.0;
     bio[i] = b;
+    // Carrion (ext4.z chance): a dead creature drops a food pellet where it fell,
+    // into its own (dead) food slot — food slots map 1:1 to creature slots, so no
+    // atomics are needed. Scavengers gather at death sites, closing the trophic
+    // loop (a predator's kills feed others). Bounded: at most one pellet per slot.
+    if (P.ext4.z > 0.0 && i < P.d1.x && foodPos[i].x < 0.0 && rnd(i + 71u, P.d1.y) < P.ext4.z) {
+      let s = state[i];
+      foodPos[i] = vec2<f32>(s.x, s.y);
+    }
     let slot = atomicAdd(&gridData[freeCountIdx()], 1u);
     freeList[slot] = i;
   }

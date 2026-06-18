@@ -256,6 +256,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // (0 = uniform ocean / no biomes). Moderate default so biomes matter but don't
   // wipe out mismatched zones (creatures can also swim toward their comfort band).
   pf[37] = 0.05;
+  // ext4.z carrionAmount: chance a dead creature drops a food pellet where it fell
+  // (0 = off). Feeds scavengers; bounded by one pellet per food slot.
+  pf[38] = 0.3;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -738,6 +741,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_food', labelKey: 'g_patchiness', idx: 26, min: 0, max: 1, step: 0.05 },
     { group: 'cat_food', labelKey: 'g_bigFood', idx: 27, min: 1, max: 12, step: 0.5 },
     { group: 'cat_food', labelKey: 'g_bigFoodAmt', idx: 32, min: 0, max: 0.3, step: 0.005 },
+    { group: 'cat_food', labelKey: 'g_carrion', idx: 38, min: 0, max: 1, step: 0.05 },
     // Evolution
     { group: 'cat_evolution', labelKey: 'g_mutRate', idx: 12, min: 0, max: 0.5, step: 0.01 },
     { group: 'cat_evolution', labelKey: 'g_mutSize', idx: 13, min: 0, max: 1, step: 0.02 },
@@ -817,6 +821,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { key: 'tog_speciation', idx: 30, on: 0.004 },
     { key: 'tog_bigfood', idx: 32, on: 0.0625 },
     { key: 'tog_current', idx: 35, on: 0.4 },
+    { key: 'tog_carrion', idx: 38, on: 0.3 },
   ];
   const toggleBtns: { btn: HTMLButtonElement; def: (typeof toggleDefs)[number] }[] = [];
   function refreshToggles(): void {
