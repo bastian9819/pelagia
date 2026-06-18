@@ -77,6 +77,18 @@ fn creatureElong(i: u32) -> f32 {
 fn creatureGlow(i: u32) -> f32 {
   return clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0);
 }
+// Ocean current at a world position: a divergence-free flow built from two
+// slowly-drifting gyres (curl of a sin/cos streamfunction). Returns a velocity in
+// ~[-1.5, 1.5] world units; the caller scales it by the current-strength param.
+// Creatures get swept into rotating gyres → mesmerising large-scale motion.
+fn currentAt(x: f32, y: f32, frame: f32) -> vec2<f32> {
+  let u = (x / P.p0.x) * TAU;
+  let w = (y / P.p0.y) * TAU;
+  let t = frame * 0.0008;
+  let vx = cos(u + t) * cos(w) + 0.5 * cos(2.0 * u - t) * cos(2.0 * w);
+  let vy = -sin(u + t) * sin(w) - 0.5 * sin(2.0 * u - t) * sin(2.0 * w);
+  return vec2<f32>(vx, vy);
+}
 const TAU: f32 = 6.2831853;
 
 fn pcg(v: u32) -> u32 {

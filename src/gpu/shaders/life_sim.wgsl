@@ -158,8 +158,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let heading = s.z + out[0] * P.p1.x * mix(1.2, 0.8, et);
   let maxSp = (P.p0.w / sqrt(size)) * mix(0.85, 1.2, et);
   let speed = (out[1] + 1.0) * 0.5 * maxSp;
-  let nx = wrapf(s.x + cos(heading) * speed * P.p1.y, W);
-  let ny = wrapf(s.y + sin(heading) * speed * P.p1.y, H);
+  // Ocean current advects every creature (ext3.w strength; 0 = still water), so
+  // they must cope with drift — gyres, downstream pile-ups, harder upstream foraging.
+  let cur = currentAt(s.x, s.y, f32(P.d1.y)) * P.ext3.w;
+  let nx = wrapf(s.x + cos(heading) * speed * P.p1.y + cur.x, W);
+  let ny = wrapf(s.y + sin(heading) * speed * P.p1.y + cur.y, H);
   state[i] = vec4<f32>(nx, ny, heading, speed);
 
   var energy = b.x;

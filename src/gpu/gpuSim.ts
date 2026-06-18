@@ -245,6 +245,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // of bioluminescence per unit of glow above 1 (0 = free).
   pf[33] = 4.0;
   pf[34] = 0.0;
+  // ext3.w currentStrength: ocean current that advects creatures (0 = still water).
+  pf[35] = 0.4;
   // ext4.x attackCost: energy spent each tick the brain's attack output is on, so
   // indiscriminate aggression is selected against (default small but non-zero).
   pf[36] = 0.04;
@@ -722,6 +724,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_world', labelKey: 'g_speed', idx: 3, min: 0.5, max: 10, step: 0.1 },
     { group: 'cat_world', labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01 },
     { group: 'cat_world', labelKey: 'g_eatRange', idx: 6, min: 2, max: 24, step: 1 },
+    { group: 'cat_world', labelKey: 'g_current', idx: 35, min: 0, max: 2, step: 0.05 },
     // Food
     { group: 'cat_food', labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1 },
     { group: 'cat_food', labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
@@ -805,6 +808,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { key: 'tog_daynight', idx: 28, on: 0.45 },
     { key: 'tog_speciation', idx: 30, on: 0.004 },
     { key: 'tog_bigfood', idx: 32, on: 0.0625 },
+    { key: 'tog_current', idx: 35, on: 0.4 },
   ];
   const toggleBtns: { btn: HTMLButtonElement; def: (typeof toggleDefs)[number] }[] = [];
   function refreshToggles(): void {
