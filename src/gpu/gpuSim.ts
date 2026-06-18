@@ -265,6 +265,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pf[38] = 0.3;
   // ext4.w toxinPotency: energy a predator loses per unit of prey toxicity (0 = off).
   pf[39] = 15;
+  // ext6.y sexualRate: chance a birth is recombined from two parents (crossover)
+  // instead of a clone (0 = fully asexual). Mixes traits across nearby lineages.
+  pf[45] = 0.25;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -959,6 +962,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_evolution', labelKey: 'g_offspring', idx: 14, min: 0.2, max: 0.8, step: 0.05 },
     { group: 'cat_evolution', labelKey: 'g_offspringSpread', idx: 33, min: 0, max: 20, step: 1 },
     { group: 'cat_evolution', labelKey: 'g_speciation', idx: 30, min: 0, max: 0.03, step: 0.001 },
+    { group: 'cat_evolution', labelKey: 'g_sexual', idx: 45, min: 0, max: 1, step: 0.05 },
     // Body / metabolism
     { group: 'cat_body', labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
     { group: 'cat_body', labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },

@@ -82,12 +82,52 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
   let hd = rnd(i + 53u, frame) * TAU;
   state[slot] = vec4<f32>(wrapf(s.x + jx, P.p0.x), wrapf(s.y + jy, P.p0.y), hd, 0.0);
 
+  // Sexual reproduction: with probability ext6.y the offspring is RECOMBINED from
+  // two parents — the reproducer and its nearest neighbour (uniform crossover per
+  // gene) — instead of a clone. This gives the evolutionary engine genetic mixing
+  // (sex), not just clonal mutation: traits from two lineages can combine. mate = i
+  // means asexual (no neighbour found / disabled).
+  var mate = i;
+  if (P.ext6.y > 0.0 && rnd(i + 211u, frame) < P.ext6.y) {
+    let cs = P.p0.z;
+    let bcx = i32(floor(s.x / cs));
+    let bcy = i32(floor(s.y / cs));
+    let cols = i32(P.d0.x);
+    let rows = i32(P.d0.y);
+    var bestD2 = 1.0e30;
+    for (var dy = -1; dy <= 1; dy = dy + 1) {
+      var cy = (bcy + dy) % rows;
+      if (cy < 0) { cy = cy + rows; }
+      for (var dx = -1; dx <= 1; dx = dx + 1) {
+        var cx = (bcx + dx) % cols;
+        if (cx < 0) { cx = cx + cols; }
+        let cell = u32(cy) * P.d0.x + u32(cx);
+        let cstart = cellStart[creatureStartBase() + cell];
+        let cend = cellStart[creatureStartBase() + cell + 1u];
+        for (var k = cstart; k < cend; k = k + 1u) {
+          let nj = sortedIdx[creatureSortBase() + k];
+          if (nj == i) { continue; }
+          let np = state[nj];
+          let ddx = wrapDelta(np.x - s.x, P.p0.x);
+          let ddy = wrapDelta(np.y - s.y, P.p0.y);
+          let d2 = ddx * ddx + ddy * ddy;
+          if (d2 < bestD2) { bestD2 = d2; mate = nj; }
+        }
+      }
+    }
+  }
+
   let src = i * GENOME_SIZE;
+  let msrc = mate * GENOME_SIZE;
   let dst = slot * GENOME_SIZE;
   let rate = P.p3.x;
   let mutStd = P.p3.y;
   for (var k = 0u; k < GENOME_SIZE; k = k + 1u) {
+    // Uniform crossover: each gene comes from either parent (half/half) when mated.
     var w = weights[src + k];
+    if (mate != i && rnd(i * 419u + k, frame) < 0.5) {
+      w = weights[msrc + k];
+    }
     if (rnd(i * 131u + k, frame) < rate) {
       w = w + gaussian(i * 977u + k, frame) * mutStd;
     }
@@ -102,7 +142,17 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
 fn foodRespawn(@builtin(global_invocation_id) gid: vec3<u32>) {
   let j = gid.x;
   if (j >= P.d1.x) { return; }
-  if (foodPos[j].x >= 0.0) { return; } // already alive
+  if (foodPos[j].x >= 0.0) {
+    // Alive food drifts with the ocean current (at half the creature rate), so
+    // plankton pools in convergence zones and rides the gyres — foraging couples
+    // to the flow. Dead slots fall through to rate-limited respawn below.
+    if (P.ext3.w > 0.0) {
+      let fp = foodPos[j];
+      let cv = currentAt(fp.x, fp.y, f32(P.d1.y)) * P.ext3.w * 0.5;
+      foodPos[j] = vec2<f32>(wrapf(fp.x + cv.x, P.p0.x), wrapf(fp.y + cv.y, P.p0.y));
+    }
+    return;
+  }
 
   loop {
     let cur = atomicLoad(&gridData[budgetIdx()]);

@@ -190,6 +190,7 @@ const S: Dict = {
   g_mutSize: { en: 'mutation size', es: 'tamaño de mutación' },
   g_speed: { en: 'max speed', es: 'velocidad máx.' },
   g_speciation: { en: 'speciation rate', es: 'tasa de especiación' },
+  g_sexual: { en: 'sexual repro', es: 'reproducción sexual' },
   ph_tree: {
     en: 'family tree (who descends from whom)',
     es: 'árbol genealógico (quién desciende de quién)',
