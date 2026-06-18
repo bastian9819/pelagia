@@ -395,8 +395,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
 
   // --- Render: HDR accumulation texture -> trails + glow -> tonemapped present ---
-  const renderUbo = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | CD });
-  const renderData = new Float32Array(12);
+  const renderUbo = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | CD });
+  const renderData = new Float32Array(16);
+  renderData[11] = world; // world size (for the present pass's thermal-field tint)
+  let fieldTint = 0; // 0 = off; the "fields" toggle sets a faint tint strength
+  let lockOn = false; // camera follows the selected creature when on
   renderData[7] = Math.floor(f * pf[32]); // big-food slot count (tracks g_bigFoodAmt)
   // renderData[8] = highlighted lineage id, [9] = highlight on (1/0).
   let highlightOn = false;
@@ -473,6 +476,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       entries: [
         { binding: 0, resource: sampler },
         { binding: 1, resource: accumView },
+        { binding: 2, resource: { buffer: renderUbo } },
       ],
     });
     // Clear the fresh accumulation texture once.
@@ -1114,6 +1118,30 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   onLang(relabelHighlight);
   ui.addTool(highlightBtn);
 
+  // "Show fields": reveal the thermal biomes as a faint background tint.
+  const fieldsBtn = mkBtn('', () => {
+    fieldTint = fieldTint > 0 ? 0 : 0.14;
+    relabelFields();
+  });
+  function relabelFields(): void {
+    fieldsBtn.textContent = (fieldTint > 0 ? '🌡 ' : '○ ') + t('showFields');
+  }
+  relabelFields();
+  onLang(relabelFields);
+  ui.addTool(fieldsBtn);
+
+  // "Follow": lock the camera onto the selected creature to watch its life up close.
+  const followBtn = mkBtn('', () => {
+    lockOn = !lockOn;
+    relabelFollow();
+  });
+  function relabelFollow(): void {
+    followBtn.textContent = (lockOn ? '🎯 ' : '○ ') + t('followCam');
+  }
+  relabelFollow();
+  onLang(relabelFollow);
+  ui.addTool(followBtn);
+
   function addWatch(id: number, lineage: number): void {
     if (id < 0 || watched.has(id) || watched.size >= MAX_WATCH) return;
     watched.set(id, { id, lineage, hue: floatFromU32(pcgHash(lineage)), history: [] });
@@ -1636,6 +1664,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     const dayPhase = Math.sin((2 * Math.PI * frame) / Math.max(1, pf[29]!));
     renderData[5] = 1.4 * (1 + 0.3 * pf[28]! * dayPhase);
     renderData[7] = Math.floor(f * pf[32]!); // big-food count tracks the live slider
+    renderData[10] = fieldTint; // thermal-field background tint (0 = off)
+    renderData[12] = frame; // for the present pass's tempAt drift
     device.queue.writeBuffer(renderUbo, 0, renderData);
 
     // Render every frame (so trails keep fading even while paused).
@@ -1688,6 +1718,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const sameLineage = Math.round(d[32]!) === selectedLineage;
         if (alive && sameLineage) {
           brainView.update(d, inspectFrame);
+          if (lockOn) {
+            cam.cx = d[26]!; // creature world x
+            cam.cy = d[27]!; // creature world y
+            clampCam();
+            updateView();
+          }
           positionRing(d);
         } else if (!alive && sameLineage) {
           // Our creature died: show it deceased once, then stop following.
