@@ -55,14 +55,14 @@ fn parentIdx(k: u32) -> u32 { return P.d0.z * 2u + 4u + P.d1.x + P.d0.w + k; } /
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
-const WEIGHT_GENES: u32 = 173u; // weights+biases (13 in, 3 out); activation genes follow (one per hidden)
-const SIZE_GENE: u32 = 183u; // body-size gene, after the 10 activation genes
-const ELONG_GENE: u32 = 184u; // elongation (eel <-> blob)
-const FIN_GENE: u32 = 185u; // tail filament (cosmetic)
-const GLOW_GENE: u32 = 186u; // bioluminescence brightness
-const THERMAL_GENE: u32 = 187u; // preferred water temperature [-1,1]
-const TOXIN_GENE: u32 = 188u; // toxicity [0,1] (poisons predators that eat it)
-const GENOME_SIZE: u32 = 189u; // WEIGHT_GENES + 10 activation + size/elong/fin/glow/thermal/toxin
+const WEIGHT_GENES: u32 = 193u; // weights+biases (15 in, 3 out); activation genes follow (one per hidden)
+const SIZE_GENE: u32 = 203u; // body-size gene, after the 10 activation genes
+const ELONG_GENE: u32 = 204u; // elongation (eel <-> blob)
+const FIN_GENE: u32 = 205u; // tail filament (cosmetic)
+const GLOW_GENE: u32 = 206u; // bioluminescence brightness
+const THERMAL_GENE: u32 = 207u; // preferred water temperature [-1,1]
+const TOXIN_GENE: u32 = 208u; // toxicity [0,1] (poisons predators that eat it)
+const GENOME_SIZE: u32 = 209u; // WEIGHT_GENES + 10 activation + size/elong/fin/glow/thermal/toxin
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;

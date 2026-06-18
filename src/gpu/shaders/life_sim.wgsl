@@ -2,7 +2,7 @@
 // brain -> move -> eat food (atomic claim) -> prey on a smaller neighbour
 // (atomic claim) -> metabolise. Only alive creatures act.
 
-const INPUT_SIZE: u32 = 13u;
+const INPUT_SIZE: u32 = 15u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 3u;
 
@@ -113,10 +113,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     inp[6] = cos(nrel);
     inp[7] = sin(nrel);
     inp[8] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
+    inp[13] = creatureToxin(nbrIdx); // neighbour's toxicity (warning signal)
+    inp[14] = clamp((size - creatureSize(nbrIdx)) / 1.6, -1.0, 1.0); // relative size
   } else {
     inp[6] = 0.0;
     inp[7] = 0.0;
     inp[8] = 0.0;
+    inp[13] = 0.0;
+    inp[14] = 0.0;
   }
   inp[9] = b.x / P.p2.z; // energy / reproThreshold
   inp[10] = s.w / P.p0.w; // speed / maxSpeed

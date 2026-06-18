@@ -34,6 +34,11 @@ import type { Rng } from '../core/rng.js';
  *                        that matches its evolved thermal-preference gene
  *  12: schoolDensity     how crowded it is locally (neighbour count, normalised)
  *                        — the raw material for schooling / dispersal behaviour
+ *  13: neighbourToxin    the nearest neighbour's toxicity in [0, 1] — lets a
+ *                        predator SEE warning signals and avoid toxic prey
+ *                        (learned aposematism), not just be poisoned after eating
+ *  14: neighbourSizeRel  own size minus the neighbour's, normalised — so an attack
+ *                        can be an informed choice (hit smaller, non-toxic prey)
  *
  * Output layout (each in [-1, 1]):
  *   0: turn          steer left/right, scaled to maxTurnRate
@@ -42,7 +47,7 @@ import type { Rng } from '../core/rng.js';
  *                    this is positive, so predation is an EVOLVED decision (a
  *                    lineage learns to hunt) rather than an automatic size rule.
  */
-export const INPUT_SIZE = 13;
+export const INPUT_SIZE = 15;
 export const HIDDEN_SIZE = 10;
 export const OUTPUT_SIZE = 3;
 

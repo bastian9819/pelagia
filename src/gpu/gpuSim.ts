@@ -877,8 +877,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function positionRing(d: Float32Array): void {
     const ppw = ppwNow();
     const dpr = canvas.width / window.innerWidth;
-    ring.style.left = `${((d[26]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
-    ring.style.top = `${((d[27]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
+    ring.style.left = `${((d[28]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
+    ring.style.top = `${((d[29]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
     const px = Math.max(18, (renderData[4]! * ppw * 2) / dpr + 10);
     ring.style.width = `${px}px`;
     ring.style.height = `${px}px`;
@@ -1319,14 +1319,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const w = watched.get(id);
         if (!w) return;
         const o = k * INSPECT_FLOATS;
-        const sameLineage = Math.round(d[o + 32]!) === w.lineage;
+        const sameLineage = Math.round(d[o + 34]!) === w.lineage;
         const sample: WatchSample = {
           tick: frame,
-          energy: d[o + 30]!,
-          speed: d[o + 29]!,
-          turn: d[o + 23]!,
-          thrust: (d[o + 24]! + 1) / 2,
-          alive: d[o + 33]! >= 0.5 && sameLineage,
+          energy: d[o + 32]!,
+          speed: d[o + 31]!,
+          turn: d[o + 25]!,
+          thrust: (d[o + 26]! + 1) / 2,
+          alive: d[o + 35]! >= 0.5 && sameLineage,
         };
         w.history.push(sample);
         if (w.history.length > MAX_WORLD_SAMPLES) w.history.shift();
@@ -1823,13 +1823,13 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         inspectReadback.unmap();
         inspectPending = false;
         if (selectedIndex < 0) return;
-        const alive = d[33]! >= 0.5;
-        const sameLineage = Math.round(d[32]!) === selectedLineage;
+        const alive = d[35]! >= 0.5;
+        const sameLineage = Math.round(d[34]!) === selectedLineage;
         if (alive && sameLineage) {
           brainView.update(d, inspectFrame);
           if (lockOn) {
-            cam.cx = d[26]!; // creature world x
-            cam.cy = d[27]!; // creature world y
+            cam.cx = d[28]!; // creature world x
+            cam.cy = d[29]!; // creature world y
             clampCam();
             updateView();
           }

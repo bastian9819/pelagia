@@ -24,16 +24,16 @@ struct Params {
 @group(0) @binding(6) var<storage, read> sortedIdx: array<u32>;
 @group(0) @binding(7) var<storage, read_write> out: array<f32>;
 
-const INPUT_SIZE: u32 = 13u;
+const INPUT_SIZE: u32 = 15u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 3u;
-const WEIGHT_GENES: u32 = 173u;
-const SIZE_GENE: u32 = 183u;
-const ELONG_GENE: u32 = 184u;
-const GLOW_GENE: u32 = 186u;
-const THERMAL_GENE: u32 = 187u;
-const TOXIN_GENE: u32 = 188u;
-const GENOME_SIZE: u32 = 189u;
+const WEIGHT_GENES: u32 = 193u;
+const SIZE_GENE: u32 = 203u;
+const ELONG_GENE: u32 = 204u;
+const GLOW_GENE: u32 = 206u;
+const THERMAL_GENE: u32 = 207u;
+const TOXIN_GENE: u32 = 208u;
+const GENOME_SIZE: u32 = 209u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -147,10 +147,16 @@ fn main() {
     inp[6] = cos(nrel);
     inp[7] = sin(nrel);
     inp[8] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
+    inp[13] = clamp(weights[nbrIdx * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0);
+    let mySize = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2);
+    let nbrSize = clamp(1.0 + 0.5 * weights[nbrIdx * GENOME_SIZE + SIZE_GENE], 0.6, 2.2);
+    inp[14] = clamp((mySize - nbrSize) / 1.6, -1.0, 1.0);
   } else {
     inp[6] = 0.0;
     inp[7] = 0.0;
     inp[8] = 0.0;
+    inp[13] = 0.0;
+    inp[14] = 0.0;
   }
   inp[9] = b.x / P.p2.z;
   inp[10] = s.w / P.p0.w;
@@ -185,24 +191,24 @@ fn main() {
     outv[o] = tanh(sum);
   }
 
-  // Write inputs(11) | hidden(10) | outputs(3) | x,y,heading,speed,energy,hue,lineage,alive
+  // Write inputs(15) | hidden(10) | outputs(3) | x,y,heading,speed,energy,hue,lineage,alive
   for (var k = 0u; k < INPUT_SIZE; k = k + 1u) { out[k] = inp[k]; }
-  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[13u + k] = hidden[k]; }
-  out[23] = outv[0];
-  out[24] = outv[1];
-  out[25] = outv[2]; // attack intent
-  out[26] = s.x;
-  out[27] = s.y;
-  out[28] = s.z;
-  out[29] = s.w;
-  out[30] = b.x;
-  out[31] = b.y;
-  out[32] = b.w;
-  out[33] = b.z;
-  out[34] = activeCount; // Phase 6: how many hidden neurons are switched on
-  out[35] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
-  out[36] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
-  out[37] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
-  out[38] = clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0); // thermal preference
-  out[39] = clamp(weights[i * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0); // toxicity
+  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[15u + k] = hidden[k]; }
+  out[25] = outv[0];
+  out[26] = outv[1];
+  out[27] = outv[2]; // attack intent
+  out[28] = s.x;
+  out[29] = s.y;
+  out[30] = s.z;
+  out[31] = s.w;
+  out[32] = b.x;
+  out[33] = b.y;
+  out[34] = b.w;
+  out[35] = b.z;
+  out[36] = activeCount; // Phase 6: how many hidden neurons are switched on
+  out[37] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
+  out[38] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
+  out[39] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
+  out[40] = clamp(weights[i * GENOME_SIZE + THERMAL_GENE], -1.0, 1.0); // thermal preference
+  out[41] = clamp(weights[i * GENOME_SIZE + TOXIN_GENE], 0.0, 1.0); // toxicity
 }

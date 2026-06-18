@@ -211,6 +211,8 @@ export class World {
     inp[10] = pop.speed[i]! / cfg.maxSpeed;
     inp[11] = 0; // temperature (GPU-only biome sense)
     inp[12] = 0; // school density (GPU-only sense)
+    inp[13] = 0; // neighbour toxicity (GPU-only sense)
+    inp[14] = 0; // neighbour relative size (GPU-only sense)
   }
 
   private seedInitialFood(): void {

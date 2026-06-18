@@ -82,6 +82,8 @@ const S: Dict = {
   in_bigfoodNear: { en: 'big food near', es: 'grande cerca' },
   in_temp: { en: 'temperature', es: 'temperatura' },
   in_school: { en: 'crowding', es: 'aglomeración' },
+  in_nbrToxin: { en: 'nbr toxin', es: 'toxina vecino' },
+  in_nbrSize: { en: 'nbr size', es: 'tamaño vecino' },
   in_nbrAhead: { en: 'nbr ahead', es: 'vecino frente' },
   in_nbrSide: { en: 'nbr side', es: 'vecino lado' },
   in_nbrNear: { en: 'nbr near', es: 'vecino cerca' },
