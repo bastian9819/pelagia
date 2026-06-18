@@ -742,6 +742,112 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   document.body.appendChild(godPanel.panel);
   ui.addTool(godPanel.toggle);
 
+  // --- Mechanism toggles + scenario presets + random-world dice -------------
+  // All drive the same god sliders, so changes are captured by sharing and the
+  // slider thumbs stay in sync. applyParams writes the uniform once per action.
+  const clampTo = (idx: number, v: number): number => {
+    const d = godDefs.find((g) => g.idx === idx);
+    return d ? Math.min(d.max, Math.max(d.min, v)) : v;
+  };
+  function applyParams(entries: [number, number][]): void {
+    for (const [idx, value] of entries) {
+      pf[idx] = value;
+      godPanel.setValue(idx, value);
+    }
+    device.queue.writeBuffer(paramsBuf, 0, pbuf);
+    refreshToggles();
+  }
+
+  const mkChip = (onClick: () => void): HTMLButtonElement => {
+    const b = document.createElement('button');
+    b.style.cssText =
+      'padding:4px 8px;margin:0 4px 4px 0;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
+      'border:1px solid rgba(63,240,216,0.25);border-radius:7px;cursor:pointer;font:inherit;font-size:11px;';
+    b.onclick = onClick;
+    return b;
+  };
+  const mkSectionLabel = (key: string): HTMLElement => {
+    const el = document.createElement('div');
+    el.style.cssText = 'color:#7fe9d8;letter-spacing:.06em;font-size:11px;margin:2px 0 6px;';
+    el.dataset.i18n = key;
+    el.textContent = t(key);
+    return el;
+  };
+
+  // On-values for each toggleable mechanism (off = 0).
+  const toggleDefs: { key: string; idx: number; on: number }[] = [
+    { key: 'tog_predation', idx: 24, on: 0.5 },
+    { key: 'tog_daynight', idx: 28, on: 0.45 },
+    { key: 'tog_speciation', idx: 30, on: 0.004 },
+    { key: 'tog_bigfood', idx: 32, on: 0.0625 },
+  ];
+  const toggleBtns: { btn: HTMLButtonElement; def: (typeof toggleDefs)[number] }[] = [];
+  function refreshToggles(): void {
+    for (const { btn, def } of toggleBtns) {
+      btn.textContent = (pf[def.idx]! > 0 ? '☑ ' : '☐ ') + t(def.key);
+    }
+  }
+  const togWrap = document.createElement('div');
+  togWrap.style.cssText = 'margin-bottom:8px;';
+  togWrap.append(mkSectionLabel('mechanisms'));
+  for (const def of toggleDefs) {
+    const btn = mkChip(() => applyParams([[def.idx, pf[def.idx]! > 0 ? 0 : def.on]]));
+    toggleBtns.push({ btn, def });
+    togWrap.append(btn);
+  }
+
+  // Scenario presets: each overrides a few sliders for a distinct ecosystem.
+  const bigFood = Math.max(8, Math.round(n * 0.012));
+  const presetDefs: { key: string; set: Record<number, number> }[] = [
+    { key: 'pre_eden', set: { 15: bigFood, 24: 0, 8: 0.08, 12: 0.06, 28: 0.15 } },
+    { key: 'pre_famine', set: { 15: Math.max(2, Math.round(n * 0.0015)), 8: 0.38, 24: 0.5 } },
+    { key: 'pre_carnage', set: { 24: 1, 25: 1.05, 15: Math.max(8, Math.round(n * 0.01)) } },
+    { key: 'pre_soup', set: { 12: 0.4, 13: 0.8, 30: 0.02 } },
+    { key: 'pre_night', set: { 28: 0.85, 29: 3500 } },
+    { key: 'pre_titans', set: { 24: 0.8, 25: 1.4, 27: 12, 32: 0.12 } },
+  ];
+  const presetWrap = document.createElement('div');
+  presetWrap.append(mkSectionLabel('scenarios'));
+  const presetBtns: { btn: HTMLButtonElement; key: string }[] = [];
+  for (const p of presetDefs) {
+    const btn = mkChip(() =>
+      applyParams(Object.entries(p.set).map(([k, v]) => [Number(k), clampTo(Number(k), v)])),
+    );
+    presetBtns.push({ btn, key: p.key });
+    presetWrap.append(btn);
+  }
+  // Random world: roll every slider, biased away from instant extinction, then
+  // reflect it in the address bar so the rolled ocean is shareable.
+  const diceBtn = mkChip(() => {
+    const entries: [number, number][] = godDefs.map((d) => {
+      let lo = d.min;
+      let hi = d.max;
+      const span = d.max - d.min;
+      if (d.idx === 15) lo = d.min + span * 0.4; // keep some food
+      if (d.idx === 8 || d.idx === 9 || d.idx === 31) hi = d.min + span * 0.45; // tame costs
+      if (d.idx === 24) hi = d.min + span * 0.7; // predation not maxed
+      const raw = lo + Math.random() * (hi - lo);
+      const snapped = Math.round(raw / d.step) * d.step;
+      return [d.idx, Math.min(d.max, Math.max(d.min, snapped))];
+    });
+    applyParams(entries);
+    applyHash({ seed, n, params: godPanel.getValues() });
+  });
+  presetWrap.append(diceBtn);
+
+  godPanel.extras.append(togWrap, presetWrap);
+  refreshToggles();
+  function relabelGodExtras(): void {
+    refreshToggles();
+    for (const { btn, key } of presetBtns) btn.textContent = t(key);
+    diceBtn.textContent = t('pre_dice');
+    for (const el of godPanel.extras.querySelectorAll<HTMLElement>('[data-i18n]')) {
+      el.textContent = t(el.dataset.i18n!);
+    }
+  }
+  relabelGodExtras();
+  onLang(relabelGodExtras);
+
   // --- Share: copy a reproducible-ocean URL (seed + N + live god params) ---
   let shareFeedbackTimer = 0;
   const shareBtn = mkBtn('', () => void onShare());
