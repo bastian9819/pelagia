@@ -51,9 +51,9 @@ fn parentIdx(k: u32) -> u32 { return P.d0.z * 2u + 4u + P.d1.x + P.d0.w + k; } /
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
-const WEIGHT_GENES: u32 = 112u; // weights+biases; activation genes follow (one per hidden)
-const SIZE_GENE: u32 = 122u; // body-size gene, after the 10 activation genes
-const GENOME_SIZE: u32 = 123u; // WEIGHT_GENES + 10 activation genes + 1 size gene (Phase 6)
+const WEIGHT_GENES: u32 = 142u; // weights+biases (11 inputs); activation genes follow (one per hidden)
+const SIZE_GENE: u32 = 152u; // body-size gene, after the 10 activation genes
+const GENOME_SIZE: u32 = 153u; // WEIGHT_GENES + 10 activation genes + 1 size gene (Phase 6)
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;

@@ -66,13 +66,17 @@ const S: Dict = {
   dominant: { en: 'dominant', es: 'dominantes' },
   distinct: { en: 'distinct strategies', es: 'estrategias distintas' },
   tr_seek: { en: 'seek', es: 'busca' },
+  tr_big: { en: 'big', es: 'grande' },
   tr_forage: { en: 'forage', es: 'forrajeo' },
   tr_cruise: { en: 'cruise', es: 'crucero' },
   sampling: { en: 'sampling…', es: 'muestreando…' },
   creatureBrain: { en: 'creature brain', es: 'cerebro de la criatura' },
-  in_foodAhead: { en: 'food ahead', es: 'comida frente' },
-  in_foodSide: { en: 'food side', es: 'comida lado' },
-  in_foodNear: { en: 'food near', es: 'comida cerca' },
+  in_planktonAhead: { en: 'plankton ahead', es: 'plancton frente' },
+  in_planktonSide: { en: 'plankton side', es: 'plancton lado' },
+  in_planktonNear: { en: 'plankton near', es: 'plancton cerca' },
+  in_bigfoodAhead: { en: 'big food ahead', es: 'grande frente' },
+  in_bigfoodSide: { en: 'big food side', es: 'grande lado' },
+  in_bigfoodNear: { en: 'big food near', es: 'grande cerca' },
   in_nbrAhead: { en: 'nbr ahead', es: 'vecino frente' },
   in_nbrSide: { en: 'nbr side', es: 'vecino lado' },
   in_nbrNear: { en: 'nbr near', es: 'vecino cerca' },
@@ -83,6 +87,8 @@ const S: Dict = {
   decision: { en: 'decision', es: 'decisión' },
   bv_policy: { en: 'turn vs bearing', es: 'giro según rumbo' },
   bv_food: { en: 'food', es: 'comida' },
+  bv_plankton: { en: 'plankton', es: 'plancton' },
+  bv_bigfood: { en: 'big food', es: 'comida grande' },
   bv_nbr: { en: 'neighbour', es: 'vecino' },
   bv_listens: { en: 'neurons attend to', es: 'las neuronas atienden a' },
   eeg_title: {
@@ -124,6 +130,7 @@ const S: Dict = {
   obs_predation: { en: 'predation', es: 'depredación' },
   tr_aggr: { en: 'aggression', es: 'agresión' },
   loading: { en: 'summoning the ocean…', es: 'invocando el océano…' },
+  desc_bigfeeder: { en: 'targets big-food blooms', es: 'busca floraciones de comida grande' },
   desc_chase: { en: 'chases food head-on', es: 'persigue la comida de frente' },
   desc_steer: { en: 'steers toward food (cautious)', es: 'gira hacia la comida (cauta)' },
   desc_straight: { en: 'fast straight-swimmer', es: 'nada recto y rápido' },
@@ -148,6 +155,8 @@ const S: Dict = {
       'dominant ones and describes their evolved strategy.<br>' +
       '• <b>Predation</b>: creatures hunt each other — a bigger one eats a smaller ' +
       'neighbour on contact, so predator and prey lineages emerge.<br>' +
+      '• <b>Two foods</b>: abundant teal plankton and rare golden big-food. Brains sense ' +
+      'each type separately, so plankton grazers and big-food hunters can specialise.<br>' +
       '• <b>Evolving brains</b>: each brain can switch hidden neurons on or off across ' +
       'generations, so its complexity itself evolves.<br>' +
       '• <b>God mode</b>: change the world (food, mutation, predation…) and watch ' +
@@ -170,6 +179,9 @@ const S: Dict = {
       'los dominantes y describe su estrategia evolucionada.<br>' +
       '• <b>Depredación</b>: las criaturas se cazan entre sí — la más grande se come a ' +
       'una vecina más pequeña al contacto, así surgen linajes depredadores y presa.<br>' +
+      '• <b>Dos comidas</b>: plancton teal abundante y comida grande dorada y rara. El ' +
+      'cerebro percibe cada tipo por separado, así surgen especialistas de plancton o de ' +
+      'comida grande.<br>' +
       '• <b>Cerebros que evolucionan</b>: cada cerebro puede encender o apagar neuronas ' +
       'ocultas entre generaciones, así que su complejidad también evoluciona.<br>' +
       '• <b>Modo dios</b>: cambia el mundo (comida, mutación, depredación…) y mira cómo ' +

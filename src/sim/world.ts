@@ -162,7 +162,10 @@ export class World {
     const ph = pop.heading[i]!;
     const inp = this.inputs;
 
-    // Nearest food.
+    // Nearest food -> plankton channel. The CPU oracle has a single food type
+    // (it is the Phase 0 forager), so the big-food channel (inp[3..5]) stays 0;
+    // the GPU sim fills both channels. Determinism is unaffected — the oracle is
+    // still fully reproducible and shares brain.ts/GENOME_SIZE with the GPU.
     const fIdx = this.foodGrid.findNearest(px, py, cfg.perceptionRadius);
     if (fIdx >= 0) {
       const dx = wrapDelta(this.food.x[fIdx]! - px, cfg.width);
@@ -177,6 +180,9 @@ export class World {
       inp[1] = 0;
       inp[2] = 0;
     }
+    inp[3] = 0; // big-food channel (GPU-only)
+    inp[4] = 0;
+    inp[5] = 0;
 
     // Nearest other creature.
     let bestIdx = -1;
@@ -192,17 +198,17 @@ export class World {
       const dy = wrapDelta(pop.y[bestIdx]! - py, cfg.height);
       const dist = Math.sqrt(bestD2);
       const rel = Math.atan2(dy, dx) - ph;
-      inp[3] = Math.cos(rel);
-      inp[4] = Math.sin(rel);
-      inp[5] = Math.max(0, 1 - dist / cfg.perceptionRadius);
+      inp[6] = Math.cos(rel);
+      inp[7] = Math.sin(rel);
+      inp[8] = Math.max(0, 1 - dist / cfg.perceptionRadius);
     } else {
-      inp[3] = 0;
-      inp[4] = 0;
-      inp[5] = 0;
+      inp[6] = 0;
+      inp[7] = 0;
+      inp[8] = 0;
     }
 
-    inp[6] = pop.energy[i]! / cfg.reproductionThreshold;
-    inp[7] = pop.speed[i]! / cfg.maxSpeed;
+    inp[9] = pop.energy[i]! / cfg.reproductionThreshold;
+    inp[10] = pop.speed[i]! / cfg.maxSpeed;
   }
 
   private seedInitialFood(): void {

@@ -22,22 +22,28 @@ const out = new Float32Array(OUTPUT_SIZE);
 
 function probe(
   genome: Float32Array,
-  foodCos: number,
-  foodSin: number,
-  foodProx: number,
+  planktonCos: number,
+  planktonSin: number,
+  planktonProx: number,
+  bigCos = 0,
+  bigSin = 0,
+  bigProx = 0,
   nbrCos = 0,
   nbrSin = 0,
   nbrProx = 0,
 ): { turn: number; thrust: number } {
   inp.fill(0);
-  inp[0] = foodCos;
-  inp[1] = foodSin;
-  inp[2] = foodProx;
-  inp[3] = nbrCos;
-  inp[4] = nbrSin;
-  inp[5] = nbrProx;
-  inp[6] = 0.5;
-  inp[7] = 0.4;
+  inp[0] = planktonCos;
+  inp[1] = planktonSin;
+  inp[2] = planktonProx;
+  inp[3] = bigCos;
+  inp[4] = bigSin;
+  inp[5] = bigProx;
+  inp[6] = nbrCos;
+  inp[7] = nbrSin;
+  inp[8] = nbrProx;
+  inp[9] = 0.5;
+  inp[10] = 0.4;
   forward(genome, 0, inp, hid, out);
   return { turn: out[0]!, thrust: (out[1]! + 1) / 2 };
 }
@@ -46,8 +52,10 @@ function probe(
 export interface LineageTraits {
   descKey: string;
   fast: boolean;
-  /** Turn-toward-food strength: >0 steers into food, <0 away. */
+  /** Turn-toward-plankton strength: >0 steers into plankton, <0 away. */
   seek: number;
+  /** Phase 6: turn-toward-big-food strength. >0 hunts big-food blooms. */
+  bigSeek: number;
   /** Thrust when food is dead ahead (0..1). */
   forage: number;
   /** Baseline thrust with no food in sight (0..1). */
@@ -73,11 +81,14 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
   const left = probe(genome, 0, 1, 0.8);
   const right = probe(genome, 0, -1, 0.8);
   const none = probe(genome, 0, 0, 0);
-  const nbrLeft = probe(genome, 0, 0, 0, 0, 1, 0.8);
-  const nbrRight = probe(genome, 0, 0, 0, 0, -1, 0.8);
+  const bigLeft = probe(genome, 0, 0, 0, 0, 1, 0.8);
+  const bigRight = probe(genome, 0, 0, 0, 0, -1, 0.8);
+  const nbrLeft = probe(genome, 0, 0, 0, 0, 0, 0, 0, 1, 0.8);
+  const nbrRight = probe(genome, 0, 0, 0, 0, 0, 0, 0, -1, 0.8);
   const forage = ahead.thrust;
   const cruise = none.thrust;
-  const seek = (left.turn - right.turn) / 2; // >0 turns toward food
+  const seek = (left.turn - right.turn) / 2; // >0 turns toward plankton
+  const bigSeek = (bigLeft.turn - bigRight.turn) / 2; // >0 turns toward big food
   const turnBias = (left.turn + right.turn) / 2; // same-way bias -> circling
   const aggression = (nbrLeft.turn - nbrRight.turn) / 2; // >0 turns toward neighbour
   let neurons = 0;
@@ -87,6 +98,7 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
   let descKey: string;
   if (aggression > 0.35) descKey = 'desc_predator';
   else if (aggression < -0.35) descKey = 'desc_skittish';
+  else if (bigSeek > 0.3 && bigSeek > seek + 0.12) descKey = 'desc_bigfeeder';
   else if (Math.abs(turnBias) > 0.35 && seek < 0.2) descKey = 'desc_circler';
   else if (seek > 0.25 && forage > 0.45) descKey = 'desc_chase';
   else if (seek > 0.25) descKey = 'desc_steer';
@@ -99,6 +111,7 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
     descKey,
     fast: (forage + cruise) / 2 > 0.55,
     seek,
+    bigSeek,
     forage,
     cruise,
     turnBias,
@@ -118,6 +131,7 @@ export interface LineageRow {
   descKey: string;
   fast: boolean;
   seek: number;
+  bigSeek: number;
   forage: number;
   cruise: number;
   aggression: number;
@@ -157,6 +171,7 @@ export function buildLineagePanel(): LineagePanel {
     const desc = `${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}`;
     const traits =
       `${t('tr_seek')} ${r.seek.toFixed(2)} · ` +
+      `${t('tr_big')} ${r.bigSeek.toFixed(2)} · ` +
       `${t('tr_aggr')} ${r.aggression.toFixed(2)} · ` +
       `${r.neurons}🧠`;
     return (

@@ -2,7 +2,7 @@
 // brain -> move -> eat food (atomic claim) -> prey on a smaller neighbour
 // (atomic claim) -> metabolise. Only alive creatures act.
 
-const INPUT_SIZE: u32 = 8u;
+const INPUT_SIZE: u32 = 11u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 2u;
 
@@ -24,9 +24,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let bcx = i32(floor(s.x / cs));
   let bcy = i32(floor(s.y / cs));
 
-  // Nearest food across the 3x3 cell block (cellSize == perception radius).
-  var bestD2 = 1.0e30;
-  var bestIdx = NONE;
+  // Nearest food of EACH type across the 3x3 cell block (cellSize == perception
+  // radius). Big food = low indices [0, f/16); plankton = the rest. Two separate
+  // channels let a brain steer toward its preferred resource even when the other
+  // type is closer — that is what makes a real sensory specialist (vs the spatial
+  // niche of D-023). Eating still targets the single nearest pellet (min of both).
+  let fBig = P.d1.x / 16u;
+  var pD2 = 1.0e30; // nearest plankton
+  var pIdx = NONE;
+  var gD2 = 1.0e30; // nearest big food
+  var gIdx = NONE;
   // Nearest OTHER creature across the same 3x3 block (creature grid).
   var nbrD2 = 1.0e30;
   var nbrIdx = NONE;
@@ -46,9 +53,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let ddx = wrapDelta(fp.x - s.x, W);
         let ddy = wrapDelta(fp.y - s.y, H);
         let d2 = ddx * ddx + ddy * ddy;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          bestIdx = fj;
+        if (fj < fBig) {
+          if (d2 < gD2) { gD2 = d2; gIdx = fj; }
+        } else {
+          if (d2 < pD2) { pD2 = d2; pIdx = fj; }
         }
       }
       // creatures in this cell
@@ -70,34 +78,51 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   var inp: array<f32, INPUT_SIZE>;
-  if (bestIdx != NONE && bestD2 <= cs * cs) {
-    let fp = foodPos[bestIdx];
-    let ddx = wrapDelta(fp.x - s.x, W);
-    let ddy = wrapDelta(fp.y - s.y, H);
-    let rel = atan2(ddy, ddx) - s.z;
+  // Plankton channel.
+  if (pIdx != NONE && pD2 <= cs * cs) {
+    let fp = foodPos[pIdx];
+    let rel = atan2(wrapDelta(fp.y - s.y, H), wrapDelta(fp.x - s.x, W)) - s.z;
     inp[0] = cos(rel);
     inp[1] = sin(rel);
-    inp[2] = max(0.0, 1.0 - sqrt(bestD2) / cs);
+    inp[2] = max(0.0, 1.0 - sqrt(pD2) / cs);
   } else {
     inp[0] = 0.0;
     inp[1] = 0.0;
     inp[2] = 0.0;
+  }
+  // Big-food channel.
+  if (gIdx != NONE && gD2 <= cs * cs) {
+    let fp = foodPos[gIdx];
+    let rel = atan2(wrapDelta(fp.y - s.y, H), wrapDelta(fp.x - s.x, W)) - s.z;
+    inp[3] = cos(rel);
+    inp[4] = sin(rel);
+    inp[5] = max(0.0, 1.0 - sqrt(gD2) / cs);
+  } else {
+    inp[3] = 0.0;
+    inp[4] = 0.0;
+    inp[5] = 0.0;
   }
   if (nbrIdx != NONE && nbrD2 <= cs * cs) {
     let np = state[nbrIdx];
     let ndx = wrapDelta(np.x - s.x, W);
     let ndy = wrapDelta(np.y - s.y, H);
     let nrel = atan2(ndy, ndx) - s.z;
-    inp[3] = cos(nrel);
-    inp[4] = sin(nrel);
-    inp[5] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
+    inp[6] = cos(nrel);
+    inp[7] = sin(nrel);
+    inp[8] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
   } else {
-    inp[3] = 0.0;
-    inp[4] = 0.0;
-    inp[5] = 0.0;
+    inp[6] = 0.0;
+    inp[7] = 0.0;
+    inp[8] = 0.0;
   }
-  inp[6] = b.x / P.p2.z; // energy / reproThreshold
-  inp[7] = s.w / P.p0.w; // speed / maxSpeed
+  inp[9] = b.x / P.p2.z; // energy / reproThreshold
+  inp[10] = s.w / P.p0.w; // speed / maxSpeed
+
+  // For eating, target the single nearest pellet of either type.
+  var bestIdx = NONE;
+  var bestD2 = 1.0e30;
+  if (pIdx != NONE && pD2 < bestD2) { bestD2 = pD2; bestIdx = pIdx; }
+  if (gIdx != NONE && gD2 < bestD2) { bestD2 = gD2; bestIdx = gIdx; }
 
   // Brain forward pass. Disabled neurons (activation gene < 0) contribute nothing.
   var p = i * GENOME_SIZE;

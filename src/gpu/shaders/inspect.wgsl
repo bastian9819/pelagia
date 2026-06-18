@@ -21,12 +21,12 @@ struct Params {
 @group(0) @binding(6) var<storage, read> sortedIdx: array<u32>;
 @group(0) @binding(7) var<storage, read_write> out: array<f32>;
 
-const INPUT_SIZE: u32 = 8u;
+const INPUT_SIZE: u32 = 11u;
 const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 2u;
-const WEIGHT_GENES: u32 = 112u;
-const SIZE_GENE: u32 = 122u;
-const GENOME_SIZE: u32 = 123u;
+const WEIGHT_GENES: u32 = 142u;
+const SIZE_GENE: u32 = 152u;
+const GENOME_SIZE: u32 = 153u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -52,8 +52,11 @@ fn main() {
   let bcy = i32(floor(s.y / cs));
   let nc = P.d0.z;
   let f = P.d1.x;
-  var bestD2 = 1.0e30;
-  var bestIdx = NONE;
+  let fBig = f / 16u;
+  var pD2 = 1.0e30; // nearest plankton
+  var pIdx = NONE;
+  var gD2 = 1.0e30; // nearest big food
+  var gIdx = NONE;
   var nbrD2 = 1.0e30;
   var nbrIdx = NONE;
   for (var dy = -1; dy <= 1; dy = dy + 1) {
@@ -71,9 +74,10 @@ fn main() {
         let ddx = wrapDelta(fp.x - s.x, W);
         let ddy = wrapDelta(fp.y - s.y, H);
         let d2 = ddx * ddx + ddy * ddy;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          bestIdx = fj;
+        if (fj < fBig) {
+          if (d2 < gD2) { gD2 = d2; gIdx = fj; }
+        } else {
+          if (d2 < pD2) { pD2 = d2; pIdx = fj; }
         }
       }
       // creature region: cellStart[nc+1+cell], sortedIdx[f + k]
@@ -95,34 +99,45 @@ fn main() {
   }
 
   var inp: array<f32, INPUT_SIZE>;
-  if (bestIdx != NONE && bestD2 <= cs * cs) {
-    let fp = foodPos[bestIdx];
-    let ddx = wrapDelta(fp.x - s.x, W);
-    let ddy = wrapDelta(fp.y - s.y, H);
-    let rel = atan2(ddy, ddx) - s.z;
+  // Plankton channel (mirrors life_sim so the viewer shows the real sensors).
+  if (pIdx != NONE && pD2 <= cs * cs) {
+    let fp = foodPos[pIdx];
+    let rel = atan2(wrapDelta(fp.y - s.y, H), wrapDelta(fp.x - s.x, W)) - s.z;
     inp[0] = cos(rel);
     inp[1] = sin(rel);
-    inp[2] = max(0.0, 1.0 - sqrt(bestD2) / cs);
+    inp[2] = max(0.0, 1.0 - sqrt(pD2) / cs);
   } else {
     inp[0] = 0.0;
     inp[1] = 0.0;
     inp[2] = 0.0;
+  }
+  // Big-food channel.
+  if (gIdx != NONE && gD2 <= cs * cs) {
+    let fp = foodPos[gIdx];
+    let rel = atan2(wrapDelta(fp.y - s.y, H), wrapDelta(fp.x - s.x, W)) - s.z;
+    inp[3] = cos(rel);
+    inp[4] = sin(rel);
+    inp[5] = max(0.0, 1.0 - sqrt(gD2) / cs);
+  } else {
+    inp[3] = 0.0;
+    inp[4] = 0.0;
+    inp[5] = 0.0;
   }
   if (nbrIdx != NONE && nbrD2 <= cs * cs) {
     let np = state[nbrIdx];
     let ndx = wrapDelta(np.x - s.x, W);
     let ndy = wrapDelta(np.y - s.y, H);
     let nrel = atan2(ndy, ndx) - s.z;
-    inp[3] = cos(nrel);
-    inp[4] = sin(nrel);
-    inp[5] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
+    inp[6] = cos(nrel);
+    inp[7] = sin(nrel);
+    inp[8] = max(0.0, 1.0 - sqrt(nbrD2) / cs);
   } else {
-    inp[3] = 0.0;
-    inp[4] = 0.0;
-    inp[5] = 0.0;
+    inp[6] = 0.0;
+    inp[7] = 0.0;
+    inp[8] = 0.0;
   }
-  inp[6] = b.x / P.p2.z;
-  inp[7] = s.w / P.p0.w;
+  inp[9] = b.x / P.p2.z;
+  inp[10] = s.w / P.p0.w;
 
   var p = i * GENOME_SIZE;
   let actBase = i * GENOME_SIZE + WEIGHT_GENES;
@@ -152,19 +167,19 @@ fn main() {
     outv[o] = tanh(sum);
   }
 
-  // Write inputs(8) | hidden(10) | outputs(2) | x,y,heading,speed,energy,hue,age,alive
+  // Write inputs(11) | hidden(10) | outputs(2) | x,y,heading,speed,energy,hue,lineage,alive
   for (var k = 0u; k < INPUT_SIZE; k = k + 1u) { out[k] = inp[k]; }
-  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[8u + k] = hidden[k]; }
-  out[18] = outv[0];
-  out[19] = outv[1];
-  out[20] = s.x;
-  out[21] = s.y;
-  out[22] = s.z;
-  out[23] = s.w;
-  out[24] = b.x;
-  out[25] = b.y;
-  out[26] = b.w;
-  out[27] = b.z;
-  out[28] = activeCount; // Phase 6: how many hidden neurons are switched on
-  out[29] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
+  for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[11u + k] = hidden[k]; }
+  out[21] = outv[0];
+  out[22] = outv[1];
+  out[23] = s.x;
+  out[24] = s.y;
+  out[25] = s.z;
+  out[26] = s.w;
+  out[27] = b.x;
+  out[28] = b.y;
+  out[29] = b.w;
+  out[30] = b.z;
+  out[31] = activeCount; // Phase 6: how many hidden neurons are switched on
+  out[32] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
 }

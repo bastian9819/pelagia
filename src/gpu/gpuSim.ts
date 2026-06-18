@@ -154,8 +154,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const cellStartBuf = device.createBuffer({ size: 2 * (numCells + 1) * 4, usage: S });
   const sortedBuf = device.createBuffer({ size: (f + n) * 4, usage: S });
   const freeListBuf = device.createBuffer({ size: n * 4, usage: S });
-  // Brain-inspector output (one selected creature): inputs|hidden|outputs|state.
-  const INSPECT_FLOATS = 32;
+  // Brain-inspector output (one selected creature): inputs(11)|hidden(10)|
+  // outputs(2)|state(8)|activeCount|size = 33 floats; padded for alignment.
+  const INSPECT_FLOATS = 36;
   const inspectBuf = device.createBuffer({ size: INSPECT_FLOATS * 4, usage: S | CS });
   const inspectReadback = device.createBuffer({
     size: INSPECT_FLOATS * 4,
@@ -905,14 +906,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const w = watched.get(id);
         if (!w) return;
         const o = k * INSPECT_FLOATS;
-        const sameLineage = Math.round(d[o + 26]!) === w.lineage;
+        const sameLineage = Math.round(d[o + 29]!) === w.lineage;
         const sample: WatchSample = {
           tick: frame,
-          energy: d[o + 24]!,
-          speed: d[o + 23]!,
-          turn: d[o + 18]!,
-          thrust: (d[o + 19]! + 1) / 2,
-          alive: d[o + 27]! >= 0.5 && sameLineage,
+          energy: d[o + 27]!,
+          speed: d[o + 26]!,
+          turn: d[o + 21]!,
+          thrust: (d[o + 22]! + 1) / 2,
+          alive: d[o + 30]! >= 0.5 && sameLineage,
         };
         w.history.push(sample);
         if (w.history.length > MAX_WORLD_SAMPLES) w.history.shift();
@@ -1109,6 +1110,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
             descKey: ch.descKey,
             fast: ch.fast,
             seek: ch.seek,
+            bigSeek: ch.bigSeek,
             forage: ch.forage,
             cruise: ch.cruise,
             aggression: ch.aggression,

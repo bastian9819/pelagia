@@ -12,21 +12,29 @@ import type { Rng } from '../core/rng.js';
  * Architecture: INPUT_SIZE -> HIDDEN_SIZE (tanh) -> OUTPUT_SIZE (tanh).
  *
  * Sensor (input) layout, all egocentric and in roughly [-1, 1] (filled by the
- * simulation loop in task 0.6):
- *   0: foodCos       cos of the angle to the nearest food, relative to heading
- *   1: foodSin       sin of that angle (food ahead / left / right)
- *   2: foodProximity 1 at touching, 0 at/after perception radius
- *   3: neighborCos   same, for the nearest other creature
- *   4: neighborSin
- *   5: neighborProximity
- *   6: energyNorm    own energy, normalised
- *   7: speedNorm     own speed, normalised
+ * simulation loop / GPU sense pass). Phase 6 splits the food sense into two
+ * TYPE-SPECIFIC channels — nearest plankton and nearest big-food — so a brain
+ * can steer toward its preferred resource even when the other type is closer.
+ * That turns the two food types (D-023) into a real sensory niche (specialists),
+ * not just a spatial one. The CPU oracle has a single food type, so it fills the
+ * plankton channel from its nearest food and leaves the big-food channel at 0.
+ *   0: planktonCos       cos of the angle to the nearest plankton, vs heading
+ *   1: planktonSin       sin of that angle (plankton ahead / left / right)
+ *   2: planktonProximity 1 at touching, 0 at/after perception radius
+ *   3: bigFoodCos        same, for the nearest big-food pellet
+ *   4: bigFoodSin
+ *   5: bigFoodProximity
+ *   6: neighborCos       same, for the nearest other creature
+ *   7: neighborSin
+ *   8: neighborProximity
+ *   9: energyNorm        own energy, normalised
+ *  10: speedNorm         own speed, normalised
  *
  * Output layout (each in [-1, 1]):
  *   0: turn          steer left/right, scaled to maxTurnRate
  *   1: thrustRaw     mapped to [0, 1] thrust by the loop
  */
-export const INPUT_SIZE = 8;
+export const INPUT_SIZE = 11;
 export const HIDDEN_SIZE = 10;
 export const OUTPUT_SIZE = 2;
 

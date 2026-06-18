@@ -24,9 +24,9 @@ describe('brain architecture', () => {
     expect(WEIGHT_GENES).toBe(
       INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE,
     );
-    expect(WEIGHT_GENES).toBe(112);
+    expect(WEIGHT_GENES).toBe(142);
     expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE + 1); // + body-size gene
-    expect(GENOME_SIZE).toBe(123);
+    expect(GENOME_SIZE).toBe(153);
   });
 });
 
@@ -45,13 +45,13 @@ describe('forward', () => {
     const a = 0.5;
     const b = 0.1;
     w[0] = a; // input0 -> hidden0
-    w[INPUT_SIZE] = b; // hidden0 bias (index 8)
+    w[INPUT_SIZE] = b; // hidden0 bias (index 11)
     // output[0] = tanh(c*hidden0 + d); output[1] stays 0.
     const c = 0.8;
     const d = -0.2;
-    const outBase = HIDDEN_SIZE * (INPUT_SIZE + 1); // 90
+    const outBase = HIDDEN_SIZE * (INPUT_SIZE + 1); // 120
     w[outBase] = c; // hidden0 -> output0
-    w[outBase + HIDDEN_SIZE] = d; // output0 bias (index 100)
+    w[outBase + HIDDEN_SIZE] = d; // output0 bias (index 130)
 
     const s = scratch();
     s.inputs[0] = 1.0;
