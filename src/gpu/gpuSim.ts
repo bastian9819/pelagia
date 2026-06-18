@@ -275,6 +275,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   pf[45] = 0.25;
   // ext6.z pheroDeposit: pheromone units each creature lays per tick (0 = off).
   pf[46] = 256;
+  // ext6.w mateChoice: strength of sexual selection on the glow ornament during
+  // sexual reproduction. 0 = mate with the nearest neighbour (no choice); higher =
+  // prefer brighter mates, so the glow gene trends up over generations (runaway).
+  // Only affects the fraction of births that are sexual (ext6.y). See D-039.
+  pf[47] = 1.0;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -979,6 +984,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_evolution', labelKey: 'g_offspringSpread', idx: 33, min: 0, max: 20, step: 1 },
     { group: 'cat_evolution', labelKey: 'g_speciation', idx: 30, min: 0, max: 0.03, step: 0.001 },
     { group: 'cat_evolution', labelKey: 'g_sexual', idx: 45, min: 0, max: 1, step: 0.05 },
+    { group: 'cat_evolution', labelKey: 'g_mate', idx: 47, min: 0, max: 4, step: 0.25 },
     // Body / metabolism
     { group: 'cat_body', labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
     { group: 'cat_body', labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },

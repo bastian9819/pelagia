@@ -83,10 +83,20 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
   state[slot] = vec4<f32>(wrapf(s.x + jx, P.p0.x), wrapf(s.y + jy, P.p0.y), hd, 0.0);
 
   // Sexual reproduction: with probability ext6.y the offspring is RECOMBINED from
-  // two parents — the reproducer and its nearest neighbour (uniform crossover per
-  // gene) — instead of a clone. This gives the evolutionary engine genetic mixing
-  // (sex), not just clonal mutation: traits from two lineages can combine. mate = i
-  // means asexual (no neighbour found / disabled).
+  // two parents — the reproducer and a chosen MATE among its neighbours (uniform
+  // crossover per gene) — instead of a clone. This gives the evolutionary engine
+  // genetic mixing (sex), not just clonal mutation: traits from two lineages can
+  // combine. mate = i means asexual (no neighbour found / disabled).
+  //
+  // Mate CHOICE / sexual selection (ext6.w): rather than always mating with the
+  // nearest neighbour, the reproducer scores candidates by a sexually-selected
+  // ornament — bioluminescence (glow) — minus a distance penalty, and picks the
+  // best. With ext6.w = 0 the score is just -distance², i.e. the nearest neighbour
+  // (the old behaviour, exactly). With ext6.w > 0, bright neighbours get chosen as
+  // mates more often, so they donate genes more often → the glow gene (neutral
+  // drift until now, D-029) comes under positive sexual selection and trends up
+  // (runaway). If glowCost (ext3.z) > 0, glow becomes a costly handicap → bright =
+  // an honest signal of fitness (Zahavi). Gradual over generations; turbo helps.
   var mate = i;
   if (P.ext6.y > 0.0 && rnd(i + 211u, frame) < P.ext6.y) {
     let cs = P.p0.z;
@@ -94,7 +104,9 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
     let bcy = i32(floor(s.y / cs));
     let cols = i32(P.d0.x);
     let rows = i32(P.d0.y);
-    var bestD2 = 1.0e30;
+    let mc = P.ext6.w; // mate-choice strength (sexual selection on glow)
+    let invD = 1.0 / (8.0 * cs * cs); // normalises distance² across the 3×3 block
+    var bestScore = -1.0e30;
     for (var dy = -1; dy <= 1; dy = dy + 1) {
       var cy = (bcy + dy) % rows;
       if (cy < 0) { cy = cy + rows; }
@@ -111,7 +123,9 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
           let ddx = wrapDelta(np.x - s.x, P.p0.x);
           let ddy = wrapDelta(np.y - s.y, P.p0.y);
           let d2 = ddx * ddx + ddy * ddy;
-          if (d2 < bestD2) { bestD2 = d2; mate = nj; }
+          // Higher = better mate: bright ornament, nearby. mc = 0 → pure nearest.
+          let score = mc * (creatureGlow(nj) - 1.0) - d2 * invD;
+          if (score > bestScore) { bestScore = score; mate = nj; }
         }
       }
     }

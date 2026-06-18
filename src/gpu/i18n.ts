@@ -196,6 +196,7 @@ const S: Dict = {
   g_speed: { en: 'max speed', es: 'velocidad máx.' },
   g_speciation: { en: 'speciation rate', es: 'tasa de especiación' },
   g_sexual: { en: 'sexual repro', es: 'reproducción sexual' },
+  g_mate: { en: 'mate choice (glow)', es: 'elección de pareja (brillo)' },
   ph_tree: {
     en: 'family tree (who descends from whom)',
     es: 'árbol genealógico (quién desciende de quién)',
@@ -244,6 +245,8 @@ const S: Dict = {
       'each type separately, so plankton grazers and big-food hunters can specialise.<br>' +
       '• <b>Evolving brains</b>: each brain can switch hidden neurons on or off across ' +
       'generations, so its complexity itself evolves.<br>' +
+      '• <b>Sexual selection</b>: when creatures mate, they prefer brighter partners, so ' +
+      'bioluminescence becomes an ornament that runs away over generations (mate choice).<br>' +
       '• <b>God mode</b>: change the world (food, mutation, predation…) and watch ' +
       'evolution respond.<br>' +
       '• <b>Observatory</b> (📊): charts of the world over time, lineage histories, and ' +
@@ -271,6 +274,9 @@ const S: Dict = {
       'comida grande.<br>' +
       '• <b>Cerebros que evolucionan</b>: cada cerebro puede encender o apagar neuronas ' +
       'ocultas entre generaciones, así que su complejidad también evoluciona.<br>' +
+      '• <b>Selección sexual</b>: al aparearse, las criaturas prefieren parejas más ' +
+      'brillantes, así la bioluminiscencia se vuelve un ornamento que se dispara entre ' +
+      'generaciones (elección de pareja).<br>' +
       '• <b>Modo dios</b>: cambia el mundo (comida, mutación, depredación…) y mira cómo ' +
       'responde la evolución.<br>' +
       '• <b>Observatorio</b> (📊): gráficas del mundo en el tiempo, historia de los ' +

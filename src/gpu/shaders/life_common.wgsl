@@ -13,7 +13,7 @@ struct Params {
   ext3: vec4<f32>, // bigFoodFraction (>0; idx < f*frac = big food), offspringSpread, glowCost, currentStrength
   ext4: vec4<f32>, // attackCost, thermalContrast, carrionAmount, _
   ext5: vec4<f32>, // brush: x, y, mode (0 off,1 attract,2 repel,4 cataclysm), radius
-  ext6: vec4<f32>, // brushStrength, _, _, _
+  ext6: vec4<f32>, // brushStrength, sexualRate, pheroDeposit, mateChoice (sexual selection)
 };
 
 // Group 0: creature + world state.
