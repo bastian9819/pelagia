@@ -29,7 +29,9 @@ const HIDDEN_SIZE: u32 = 10u;
 const OUTPUT_SIZE: u32 = 2u;
 const WEIGHT_GENES: u32 = 142u;
 const SIZE_GENE: u32 = 152u;
-const GENOME_SIZE: u32 = 153u;
+const ELONG_GENE: u32 = 153u;
+const GLOW_GENE: u32 = 155u;
+const GENOME_SIZE: u32 = 156u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -185,4 +187,6 @@ fn main() {
   out[30] = b.z;
   out[31] = activeCount; // Phase 6: how many hidden neurons are switched on
   out[32] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
+  out[33] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
+  out[34] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
 }

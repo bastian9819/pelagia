@@ -8,7 +8,14 @@ import foodShader from './shaders/render_food.wgsl?raw';
 import fadeShader from './shaders/fade.wgsl?raw';
 import presentShader from './shaders/present.wgsl?raw';
 import { DEFAULT_CONFIG } from '../core/config.js';
-import { GENOME_SIZE, WEIGHT_GENES, SIZE_GENE } from '../sim/brain.js';
+import {
+  GENOME_SIZE,
+  WEIGHT_GENES,
+  SIZE_GENE,
+  ELONG_GENE,
+  FIN_GENE,
+  GLOW_GENE,
+} from '../sim/brain.js';
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
@@ -118,6 +125,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       // Body-size gene with real spread (~N(1, 0.4) bodies) so predator/prey size
       // niches can form from the start instead of waiting for variance to build.
       weightsData[wb + SIZE_GENE] = rngWeights.nextGaussian() * 0.8;
+      // Morphology genes seeded with spread so creatures look varied from tick 0:
+      // elongation (eel↔blob), tail filament and bioluminescence all evolve.
+      weightsData[wb + ELONG_GENE] = rngWeights.nextGaussian() * 0.7;
+      weightsData[wb + FIN_GENE] = rngWeights.nextGaussian() * 0.9;
+      weightsData[wb + GLOW_GENE] = rngWeights.nextGaussian() * 0.7;
     }
     for (let j = 0; j < f; j++) {
       if (j < foodInitAlive) {
@@ -555,7 +567,15 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   // --- Colour-by-trait: how creatures are tinted (renderData[6]); button lives
   // on the transport bar and is driven through this control. ---
-  const COLOR_MODES = ['lineageWord', 'sizeWord', 'neurons', 'energyWord', 'speedWord'];
+  const COLOR_MODES = [
+    'lineageWord',
+    'sizeWord',
+    'neurons',
+    'energyWord',
+    'speedWord',
+    'elongWord',
+    'glowWord',
+  ];
   let colorMode = 0;
 
   // --- Stats panel + controls ---
@@ -716,6 +736,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     { group: 'cat_body', labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
     { group: 'cat_body', labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },
     { group: 'cat_body', labelKey: 'g_turnCost', idx: 31, min: 0, max: 0.2, step: 0.005 },
+    { group: 'cat_body', labelKey: 'g_glowCost', idx: 34, min: 0, max: 0.2, step: 0.005 },
     // Predation
     { group: 'cat_predation', labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
     { group: 'cat_predation', labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },

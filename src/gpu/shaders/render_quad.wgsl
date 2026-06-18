@@ -18,12 +18,16 @@ struct RParams {
 const WEIGHT_GENES: u32 = 142u;
 const HIDDEN_SIZE: u32 = 10u;
 const SIZE_GENE: u32 = 152u;
-const GENOME_SIZE: u32 = 153u;
+const ELONG_GENE: u32 = 153u;
+const FIN_GENE: u32 = 154u;
+const GLOW_GENE: u32 = 155u;
+const GENOME_SIZE: u32 = 156u;
 
 struct VSOut {
   @builtin(position) pos: vec4<f32>,
   @location(0) uv: vec2<f32>,
   @location(1) color: vec3<f32>,
+  @location(2) fin: f32, // tail-filament length (cosmetic morphology)
 };
 
 fn hue2rgb(h: f32) -> vec3<f32> {
@@ -49,13 +53,20 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   }
   let q = quad[vi];
   let s = state[ii];
+  // Evolved morphology genes (all phenotype, visible on screen).
+  let g = ii * GENOME_SIZE;
+  let bodySize = clamp(1.0 + 0.5 * weights[g + SIZE_GENE], 0.6, 2.2);
+  let elong = clamp(1.0 + 0.6 * weights[g + ELONG_GENE], 0.5, 2.0);
+  let glow = clamp(1.0 + 0.6 * weights[g + GLOW_GENE], 0.6, 2.0);
+  out.fin = clamp(0.5 + 0.5 * weights[g + FIN_GENE], 0.0, 1.0);
   // Orient the billboard so local +y points along the heading (swim direction).
+  // Stretch along the body axis by elongation (area-preserving): eels look long
+  // and thin, blobs short and wide — morphology is legible at a glance.
   let a = s.z - 1.5707963;
   let ca = cos(a);
   let sa = sin(a);
-  let rl = vec2<f32>(q.x * ca - q.y * sa, q.x * sa + q.y * ca);
-  // Scale the body by the evolved size gene so morphology is visible on screen.
-  let bodySize = clamp(1.0 + 0.5 * weights[ii * GENOME_SIZE + SIZE_GENE], 0.6, 2.2);
+  let qs = vec2<f32>(q.x / sqrt(elong), q.y * sqrt(elong));
+  let rl = vec2<f32>(qs.x * ca - qs.y * sa, qs.x * sa + qs.y * ca);
   let world = vec2<f32>(s.x, s.y) + rl * R.sizeWorld * bodySize;
   out.pos = vec4<f32>(world.x * R.view.x + R.view.z, world.y * R.view.y + R.view.w, 0.0, 1.0);
   out.uv = q; // unrotated local coords; +y is the creature's front
@@ -76,12 +87,17 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
     col = hue2rgb((1.0 - clamp(b.x / 100.0, 0.0, 1.0)) * 0.66);
   } else if (mode == 4u) {
     col = hue2rgb((1.0 - clamp(s.w / 4.0, 0.0, 1.0)) * 0.66);
+  } else if (mode == 5u) {
+    col = hue2rgb((1.0 - (elong - 0.5) / 1.5) * 0.66); // elongation
+  } else if (mode == 6u) {
+    col = hue2rgb((1.0 - (glow - 0.6) / 1.4) * 0.66); // bioluminescence
   }
   // Highlight mode: dim every creature that isn't in the selected lineage, so a
   // clade stands out among thousands.
   var dim = 1.0;
   if (R.hl.y > 0.5 && abs(b.w - R.hl.x) > 0.5) { dim = 0.1; }
-  out.color = col * R.brightness * dim;
+  // Brighter creatures literally glow more (evolved bioluminescence).
+  out.color = col * R.brightness * dim * glow;
   return out;
 }
 
@@ -92,6 +108,9 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
   let body = smoothstep(1.0, 0.0, length(vec2<f32>(u.x * 1.7, u.y)));
   // Bright head toward the front (+y); a faint tail behind it.
   let head = smoothstep(0.55, 0.0, length(vec2<f32>(u.x * 1.6, u.y - 0.35)));
-  let intensity = body * body * 0.45 + head * 1.5;
+  // Evolved tail filament: a thin glowing streak trailing behind, length/strength
+  // set by the FIN gene — pure silhouette variety so creatures look distinct.
+  let tail = smoothstep(0.14, 0.0, abs(u.x)) * smoothstep(-0.2, -1.0, u.y) * in.fin;
+  let intensity = body * body * 0.45 + head * 1.5 + tail * 0.7;
   return vec4<f32>(in.color * intensity, 1.0); // additive blend
 }

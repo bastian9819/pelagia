@@ -151,8 +151,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // Move. Bigger bodies have a lower top speed (prey can outrun predators).
-  let heading = s.z + out[0] * P.p1.x;
-  let maxSp = P.p0.w / sqrt(size);
+  // Elongation is a real morphology trade-off: streamlined eels (elong>1) swim
+  // faster but turn worse; round blobs (elong<1) are nimble but slower.
+  let elong = creatureElong(i);
+  let et = (elong - 0.5) / 1.5; // 0 = round, 1 = eel
+  let heading = s.z + out[0] * P.p1.x * mix(1.2, 0.8, et);
+  let maxSp = (P.p0.w / sqrt(size)) * mix(0.85, 1.2, et);
   let speed = (out[1] + 1.0) * 0.5 * maxSp;
   let nx = wrapf(s.x + cos(heading) * speed * P.p1.y, W);
   let ny = wrapf(s.y + sin(heading) * speed * P.p1.y, H);
@@ -199,8 +203,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // Metabolise. Bigger bodies cost more just to stay alive (size's downside);
-  // turning costs energy too (ext2.w; 0 = free) so agile steering isn't free.
-  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]));
+  // turning costs energy too (ext2.w; 0 = free) so agile steering isn't free, and
+  // bioluminescence can cost energy (ext3.z; 0 = free) so glow isn't always free.
+  let glowCost = P.ext3.z * max(0.0, creatureGlow(i) - 1.0);
+  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost);
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;

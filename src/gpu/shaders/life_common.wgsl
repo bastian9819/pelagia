@@ -57,7 +57,10 @@ fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature regi
 
 const WEIGHT_GENES: u32 = 142u; // weights+biases (11 inputs); activation genes follow (one per hidden)
 const SIZE_GENE: u32 = 152u; // body-size gene, after the 10 activation genes
-const GENOME_SIZE: u32 = 153u; // WEIGHT_GENES + 10 activation genes + 1 size gene (Phase 6)
+const ELONG_GENE: u32 = 153u; // elongation (eel <-> blob)
+const FIN_GENE: u32 = 154u; // tail filament (cosmetic)
+const GLOW_GENE: u32 = 155u; // bioluminescence brightness
+const GENOME_SIZE: u32 = 156u; // WEIGHT_GENES + 10 activation + size + elong + fin + glow
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;
@@ -65,6 +68,14 @@ const NONE: u32 = 0xffffffffu;
 // Body-size multiplier of creature i from its size gene (gene 0 -> 1.0).
 fn creatureSize(i: u32) -> f32 {
   return clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], SIZE_MIN, SIZE_MAX);
+}
+// Elongation factor (>1 = streamlined eel, <1 = round blob; gene 0 -> 1.0).
+fn creatureElong(i: u32) -> f32 {
+  return clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0);
+}
+// Bioluminescence multiplier (gene 0 -> 1.0).
+fn creatureGlow(i: u32) -> f32 {
+  return clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0);
 }
 const TAU: f32 = 6.2831853;
 

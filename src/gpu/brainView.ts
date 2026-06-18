@@ -369,6 +369,10 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       const alive = d[30]! >= 0.5;
       const neurons = Math.round(d[31]!);
       const bodySize = d[32]!;
+      const elong = d[33]!;
+      const glow = d[34]!;
+      const shapeTxt =
+        elong > 1.15 ? t('shapeEel') : elong < 0.85 ? t('shapeBlob') : t('shapeOval');
       draw(inputs, hidden, outputs);
       const turn = outputs[0]!;
       const thrust = (outputs[1]! + 1) / 2;
@@ -379,6 +383,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
         `${t('lineageWord')} #${lineage}${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>` +
         `<div>${t('energyWord')} ${energy.toFixed(1)} · ${t('speedWord')} ${speed.toFixed(1)} · ` +
         `${t('sizeWord')} ${bodySize.toFixed(2)}×</div>` +
+        `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}×</div>` +
         `<div>${t('neurons')} ${neurons}/${HIDDEN_SIZE}</div>` +
         `<div>${t('decision')}: ${t('out_turn')} ${turnTxt} · ${t('out_thrust')} ${(thrust * 100).toFixed(0)}%</div>`;
     },
