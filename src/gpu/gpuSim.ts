@@ -173,11 +173,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   device.queue.writeBuffer(weightsBuf, 0, weightsData);
   device.queue.writeBuffer(foodBuf, 0, foodData);
 
-  // --- Params uniform (128 bytes: 6 vec4<f32> + 2 vec4<u32>) ---
+  // --- Params uniform (192 bytes: 10 vec4<f32> + 2 vec4<u32>) ---
   // Appended additively so existing indices never move: d0 = pu[16..19],
-  // d1 = pu[20..23], ext = pf[24..27], ext2 = pf[28..31] (day/night).
-  const paramsBuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | CD });
-  const pbuf = new ArrayBuffer(128);
+  // d1 = pu[20..23], ext = pf[24..27], ext2 = pf[28..31] (day/night + turnCost),
+  // ext3..ext6 = pf[32..47] (customisation headroom). Grown from 128B (gotcha #5).
+  const paramsBuf = device.createBuffer({ size: 192, usage: GPUBufferUsage.UNIFORM | CD });
+  const pbuf = new ArrayBuffer(192);
   const pf = new Float32Array(pbuf);
   const pu = new Uint32Array(pbuf);
   pf[0] = world;
@@ -222,6 +223,16 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // Speciation rate (ext2.z): chance per birth that the offspring founds a new
   // lineage (new colour + parent link) → a branching family tree over time.
   pf[30] = 0.004;
+  // ext2.w turnCost: energy spent per unit of |turn| (0 = turning is free).
+  pf[31] = 0.0;
+  // ext3.x bigFoodFraction: pellets with index < f*frac are "big food" (default
+  // 1/16 ≈ 0.0625, matching the old hardcoded f/16); 0 disables big food.
+  pf[32] = 0.0625;
+  // ext3.y offspringSpread: how far a newborn is jittered from its parent (world
+  // units; default 4 = the old hardcoded value). ext3.z glowCost: metabolic cost
+  // of bioluminescence per unit of glow above 1 (0 = free).
+  pf[33] = 4.0;
+  pf[34] = 0.0;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -360,7 +371,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // --- Render: HDR accumulation texture -> trails + glow -> tonemapped present ---
   const renderUbo = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | CD });
   const renderData = new Float32Array(12);
-  renderData[7] = Math.floor(f / 16); // big-food slot count for the food renderer
+  renderData[7] = Math.floor(f * pf[32]); // big-food slot count (tracks g_bigFoodAmt)
   // renderData[8] = highlighted lineage id, [9] = highlight on (1/0).
   let highlightOn = false;
   function applyHighlight(): void {
@@ -684,23 +695,33 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   // --- God mode: live world parameters (write straight into the params uniform) ---
   const godDefs: Omit<GodSpec, 'value'>[] = [
-    { labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1 },
-    { labelKey: 'g_mutRate', idx: 12, min: 0, max: 0.5, step: 0.01 },
-    { labelKey: 'g_mutSize', idx: 13, min: 0, max: 1, step: 0.02 },
-    { labelKey: 'g_speed', idx: 3, min: 0.5, max: 10, step: 0.1 },
-    { labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01 },
-    { labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
-    { labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
-    { labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1 },
-    { labelKey: 'g_offspring', idx: 14, min: 0.2, max: 0.8, step: 0.05 },
-    { labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },
-    { labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
-    { labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
-    { labelKey: 'g_patchiness', idx: 26, min: 0, max: 1, step: 0.05 },
-    { labelKey: 'g_bigFood', idx: 27, min: 1, max: 12, step: 0.5 },
-    { labelKey: 'g_dayNight', idx: 28, min: 0, max: 0.85, step: 0.05 },
-    { labelKey: 'g_dayLength', idx: 29, min: 400, max: 4000, step: 100 },
-    { labelKey: 'g_speciation', idx: 30, min: 0, max: 0.03, step: 0.001 },
+    // World
+    { group: 'cat_world', labelKey: 'g_speed', idx: 3, min: 0.5, max: 10, step: 0.1 },
+    { group: 'cat_world', labelKey: 'g_agility', idx: 4, min: 0.05, max: 1.2, step: 0.01 },
+    { group: 'cat_world', labelKey: 'g_eatRange', idx: 6, min: 2, max: 24, step: 1 },
+    // Food
+    { group: 'cat_food', labelKey: 'g_food', idx: 15, min: 0, max: Math.max(8, n * 0.02), step: 1 },
+    { group: 'cat_food', labelKey: 'g_foodEnergy', idx: 7, min: 2, max: 30, step: 0.5 },
+    { group: 'cat_food', labelKey: 'g_patchiness', idx: 26, min: 0, max: 1, step: 0.05 },
+    { group: 'cat_food', labelKey: 'g_bigFood', idx: 27, min: 1, max: 12, step: 0.5 },
+    { group: 'cat_food', labelKey: 'g_bigFoodAmt', idx: 32, min: 0, max: 0.3, step: 0.005 },
+    // Evolution
+    { group: 'cat_evolution', labelKey: 'g_mutRate', idx: 12, min: 0, max: 0.5, step: 0.01 },
+    { group: 'cat_evolution', labelKey: 'g_mutSize', idx: 13, min: 0, max: 1, step: 0.02 },
+    { group: 'cat_evolution', labelKey: 'g_reproAt', idx: 10, min: 30, max: 200, step: 1 },
+    { group: 'cat_evolution', labelKey: 'g_offspring', idx: 14, min: 0.2, max: 0.8, step: 0.05 },
+    { group: 'cat_evolution', labelKey: 'g_offspringSpread', idx: 33, min: 0, max: 20, step: 1 },
+    { group: 'cat_evolution', labelKey: 'g_speciation', idx: 30, min: 0, max: 0.03, step: 0.001 },
+    // Body / metabolism
+    { group: 'cat_body', labelKey: 'g_metabolism', idx: 8, min: 0, max: 0.6, step: 0.01 },
+    { group: 'cat_body', labelKey: 'g_moveCost', idx: 9, min: 0, max: 0.3, step: 0.01 },
+    { group: 'cat_body', labelKey: 'g_turnCost', idx: 31, min: 0, max: 0.2, step: 0.005 },
+    // Predation
+    { group: 'cat_predation', labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
+    { group: 'cat_predation', labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
+    // Cycle
+    { group: 'cat_cycle', labelKey: 'g_dayNight', idx: 28, min: 0, max: 0.85, step: 0.05 },
+    { group: 'cat_cycle', labelKey: 'g_dayLength', idx: 29, min: 400, max: 4000, step: 100 },
   ];
   // Restore shared god params into the uniform BEFORE warmup and before building
   // the sliders, so the warmed-up ocean and the slider positions both reflect the
@@ -1357,6 +1378,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     // the cycle is visible (the ocean brightens by day, darkens at night).
     const dayPhase = Math.sin((2 * Math.PI * frame) / Math.max(1, pf[29]!));
     renderData[5] = 1.4 * (1 + 0.3 * pf[28]! * dayPhase);
+    renderData[7] = Math.floor(f * pf[32]!); // big-food count tracks the live slider
     device.queue.writeBuffer(renderUbo, 0, renderData);
 
     // Render every frame (so trails keep fading even while paused).

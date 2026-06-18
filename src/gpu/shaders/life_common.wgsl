@@ -9,7 +9,11 @@ struct Params {
   d0: vec4<u32>, // cols, rows, numCells, n
   d1: vec4<u32>, // f (food count), frame, selectedIndex, worldSeed
   ext: vec4<f32>, // predationGain (0 disables), predationMargin, foodPatchiness, bigFoodMult
-  ext2: vec4<f32>, // dayNightStrength (0 disables), dayLength (ticks), _, _
+  ext2: vec4<f32>, // dayNightStrength (0 disables), dayLength (ticks), speciationRate, turnCost
+  ext3: vec4<f32>, // bigFoodFraction (>0; idx < f*frac = big food), offspringSpread, glowCost, _
+  ext4: vec4<f32>, // reserved (customisation headroom)
+  ext5: vec4<f32>, // reserved
+  ext6: vec4<f32>, // reserved
 };
 
 // Group 0: creature + world state.

@@ -29,7 +29,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // channels let a brain steer toward its preferred resource even when the other
   // type is closer — that is what makes a real sensory specialist (vs the spatial
   // niche of D-023). Eating still targets the single nearest pellet (min of both).
-  let fBig = P.d1.x / 16u;
+  let fBig = u32(f32(P.d1.x) * P.ext3.x); // big-food slot count (ext3.x fraction; 0 = none)
   var pD2 = 1.0e30; // nearest plankton
   var pIdx = NONE;
   var gD2 = 1.0e30; // nearest big food
@@ -170,7 +170,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       let prev = atomicExchange(&gridData[claimIdx(bestIdx)], 1u);
       if (prev == 0u) {
         // Big food (low indices) is worth ext.w times a plankton pellet.
-        let big = bestIdx < (P.d1.x / 16u);
+        let big = bestIdx < fBig;
         energy = energy + P.p1.w * select(1.0, P.ext.w, big);
         foodPos[bestIdx] = vec2<f32>(-1.0, -1.0); // mark eaten (rate-limited respawn)
       }
@@ -198,8 +198,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
   }
 
-  // Metabolise. Bigger bodies cost more just to stay alive (size's downside).
-  energy = energy - (P.p2.x * size + P.p2.y * speed);
+  // Metabolise. Bigger bodies cost more just to stay alive (size's downside);
+  // turning costs energy too (ext2.w; 0 = free) so agile steering isn't free.
+  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]));
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;

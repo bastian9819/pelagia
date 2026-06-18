@@ -10,6 +10,9 @@ struct Params {
   p3: vec4<f32>,
   d0: vec4<u32>, // cols, rows, numCells, n
   d1: vec4<u32>, // f, frame, selectedIndex, _
+  ext: vec4<f32>,
+  ext2: vec4<f32>,
+  ext3: vec4<f32>, // bigFoodFraction in .x (so the viewer senses food types like the sim)
 };
 
 @group(0) @binding(0) var<uniform> P: Params;
@@ -52,7 +55,7 @@ fn main() {
   let bcy = i32(floor(s.y / cs));
   let nc = P.d0.z;
   let f = P.d1.x;
-  let fBig = f / 16u;
+  let fBig = u32(f32(f) * P.ext3.x);
   var pD2 = 1.0e30; // nearest plankton
   var pIdx = NONE;
   var gD2 = 1.0e30; // nearest big food

@@ -53,6 +53,18 @@ describe('decodeHash', () => {
     });
   });
 
+  it('keeps high god indices in the expanded uniform (e.g. 30=speciation, 33=ext3)', () => {
+    const parsed = decodeHash('#s=1&n=1&g=30:0.01,33:6');
+    expect(parsed).toEqual({
+      seed: 1,
+      n: 1,
+      params: [
+        { idx: 30, value: 0.01 },
+        { idx: 33, value: 6 },
+      ],
+    });
+  });
+
   it('ignores a negative or zero N', () => {
     expect(decodeHash('#s=1&n=0')).toEqual({ seed: 1 });
   });

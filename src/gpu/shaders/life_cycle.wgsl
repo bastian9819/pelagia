@@ -68,8 +68,9 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
   bio[slot] = vec4<f32>(half, childHue, 1.0, childLin);
 
   let s = state[i];
-  let jx = (rnd(i + 11u, frame) - 0.5) * 4.0;
-  let jy = (rnd(i + 29u, frame) - 0.5) * 4.0;
+  let spread = P.ext3.y; // offspring dispersal distance (world units; ext3.y)
+  let jx = (rnd(i + 11u, frame) - 0.5) * spread;
+  let jy = (rnd(i + 29u, frame) - 0.5) * spread;
   let hd = rnd(i + 53u, frame) * TAU;
   state[slot] = vec4<f32>(wrapf(s.x + jx, P.p0.x), wrapf(s.y + jy, P.p0.y), hd, 0.0);
 
@@ -105,7 +106,7 @@ fn foodRespawn(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Two food types by index. Big food (rare, low indices) respawns in a FEW tight
   // drifting blooms -> rich hotspots worth competing over. Plankton (the rest)
   // clusters per the patchiness slider (P.ext.z): uniform (0) -> tight (1).
-  let big = j < (P.d1.x / 16u);
+  let big = j < u32(f32(P.d1.x) * P.ext3.x); // big-food slots (ext3.x fraction)
   var K = 5u;
   var spread = mix(P.p0.x * 0.5, P.p0.x * 0.04, clamp(P.ext.z, 0.0, 1.0));
   var drift = 0.0008;

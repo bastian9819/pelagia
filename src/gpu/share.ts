@@ -79,9 +79,9 @@ export function decodeHash(hash: string): ParsedShare | null {
       if (k === undefined || v === undefined) continue;
       const idx = Number(k);
       const value = Number(v);
-      // Guard the index range (params uniform is 28 floats/u32) and finiteness;
+      // Guard the index range (params uniform is 48 floats/u32) and finiteness;
       // the caller further restricts to known god-mode indices and clamps ranges.
-      if (Number.isInteger(idx) && idx >= 0 && idx < 28 && Number.isFinite(value)) {
+      if (Number.isInteger(idx) && idx >= 0 && idx < 48 && Number.isFinite(value)) {
         params.push({ idx, value });
       }
     }
