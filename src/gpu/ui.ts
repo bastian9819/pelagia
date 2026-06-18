@@ -4,7 +4,7 @@
  */
 import { t, onLang, toggleLang, getLang } from './i18n.js';
 
-const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4];
+const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16];
 const DEFAULT_SPEED_IDX = 3; // 1x
 
 export interface OceanUi {
