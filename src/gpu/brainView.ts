@@ -1,9 +1,10 @@
 /**
  * Brain inspector: the selected creature's neural network firing in real time
  * (sensors -> hidden -> outputs, nodes coloured by activation) plus live stats.
- * Read-back layout: [0..10] inputs (11), [11..20] hidden, [21..22] outputs,
- * [23] x, [24] y, [25] heading, [26] speed, [27] energy, [28] hue, [29] lineage,
- * [30] alive, [31] active hidden-neuron count, [32] body size.
+ * Read-back layout: [0..10] inputs (11), [11..20] hidden, [21..23] outputs
+ * (turn, thrust, attack), [24] x, [25] y, [26] heading, [27] speed, [28] energy,
+ * [29] hue, [30] lineage, [31] alive, [32] active hidden-neuron count, [33] body
+ * size, [34] elongation, [35] glow.
  */
 import { t, onLang } from './i18n.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
@@ -32,6 +33,7 @@ const EEG_CHANNELS: {
   { key: 'energyWord', color: '#9b8cff', lo: 0, hi: 1, get: (d) => Math.min(1, d[9]!) },
   { key: 'out_turn', color: '#ff5aa6', lo: -1, hi: 1, get: (d) => d[21]! },
   { key: 'out_thrust', color: '#5ad1ff', lo: 0, hi: 1, get: (d) => (d[22]! + 1) / 2 },
+  { key: 'out_attack', color: '#ff3b3b', lo: 0, hi: 1, get: (d) => Math.max(0, d[23]!) },
 ];
 const EEG_LEN = 160; // samples kept (one per sim tick)
 
@@ -48,7 +50,7 @@ const INPUT_KEYS = [
   'in_energy',
   'in_speed',
 ];
-const OUTPUT_KEYS = ['out_turn', 'out_thrust'];
+const OUTPUT_KEYS = ['out_turn', 'out_thrust', 'out_attack'];
 
 const W = 320;
 const H = 230;
@@ -289,7 +291,10 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     cx.clearRect(0, 0, W, H);
     const inPos = inputs.map((_, i) => ({ x: IN_X, y: colY(inputs.length, i, 18, H - 12) }));
     const hidPos = hidden.map((_, i) => ({ x: HID_X, y: colY(10, i, 12, H - 12) }));
-    const outPos = outputs.map((_, i) => ({ x: OUT_X, y: colY(2, i, H * 0.35, H * 0.65) }));
+    const outPos = outputs.map((_, i) => ({
+      x: OUT_X,
+      y: colY(outputs.length, i, H * 0.32, H * 0.68),
+    }));
 
     cx.strokeStyle = 'rgba(120,160,200,0.06)';
     cx.lineWidth = 1;
@@ -361,21 +366,22 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       pushTape(d, frame);
       const inputs = Array.from(d.subarray(0, 11));
       const hidden = Array.from(d.subarray(11, 21));
-      const outputs = Array.from(d.subarray(21, 23));
-      const speed = d[26]!;
-      const energy = d[27]!;
-      const hue = d[28]!;
-      const lineage = Math.round(d[29]!);
-      const alive = d[30]! >= 0.5;
-      const neurons = Math.round(d[31]!);
-      const bodySize = d[32]!;
-      const elong = d[33]!;
-      const glow = d[34]!;
+      const outputs = Array.from(d.subarray(21, 24));
+      const speed = d[27]!;
+      const energy = d[28]!;
+      const hue = d[29]!;
+      const lineage = Math.round(d[30]!);
+      const alive = d[31]! >= 0.5;
+      const neurons = Math.round(d[32]!);
+      const bodySize = d[33]!;
+      const elong = d[34]!;
+      const glow = d[35]!;
       const shapeTxt =
         elong > 1.15 ? t('shapeEel') : elong < 0.85 ? t('shapeBlob') : t('shapeOval');
       draw(inputs, hidden, outputs);
       const turn = outputs[0]!;
       const thrust = (outputs[1]! + 1) / 2;
+      const attack = outputs[2]!;
       const turnTxt = turn > 0.1 ? t('turnRight') : turn < -0.1 ? t('turnLeft') : t('straight');
       const hueCss = `hsl(${Math.round(hue * 360)}, 90%, 62%)`;
       stats.innerHTML =
@@ -385,7 +391,8 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
         `${t('sizeWord')} ${bodySize.toFixed(2)}×</div>` +
         `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}×</div>` +
         `<div>${t('neurons')} ${neurons}/${HIDDEN_SIZE}</div>` +
-        `<div>${t('decision')}: ${t('out_turn')} ${turnTxt} · ${t('out_thrust')} ${(thrust * 100).toFixed(0)}%</div>`;
+        `<div>${t('decision')}: ${t('out_turn')} ${turnTxt} · ${t('out_thrust')} ${(thrust * 100).toFixed(0)}%` +
+        `${attack > 0 ? ` · <span style="color:#ff3b3b">${t('out_attack')} ▲</span>` : ''}</div>`;
     },
   };
 }

@@ -15,13 +15,13 @@ struct RParams {
 @group(0) @binding(2) var<storage, read> bio: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read> weights: array<f32>; // genome: size + activation genes
 
-const WEIGHT_GENES: u32 = 142u;
+const WEIGHT_GENES: u32 = 153u;
 const HIDDEN_SIZE: u32 = 10u;
-const SIZE_GENE: u32 = 152u;
-const ELONG_GENE: u32 = 153u;
-const FIN_GENE: u32 = 154u;
-const GLOW_GENE: u32 = 155u;
-const GENOME_SIZE: u32 = 156u;
+const SIZE_GENE: u32 = 163u;
+const ELONG_GENE: u32 = 164u;
+const FIN_GENE: u32 = 165u;
+const GLOW_GENE: u32 = 166u;
+const GENOME_SIZE: u32 = 167u;
 
 struct VSOut {
   @builtin(position) pos: vec4<f32>,

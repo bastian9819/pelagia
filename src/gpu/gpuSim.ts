@@ -245,6 +245,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // of bioluminescence per unit of glow above 1 (0 = free).
   pf[33] = 4.0;
   pf[34] = 0.0;
+  // ext4.x attackCost: energy spent each tick the brain's attack output is on, so
+  // indiscriminate aggression is selected against (default small but non-zero).
+  pf[36] = 0.04;
   function writeParams(frame: number): void {
     pu[21] = frame;
     device.queue.writeBuffer(paramsBuf, 0, pbuf);
@@ -655,8 +658,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function positionRing(d: Float32Array): void {
     const ppw = ppwNow();
     const dpr = canvas.width / window.innerWidth;
-    ring.style.left = `${((d[20]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
-    ring.style.top = `${((d[21]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
+    ring.style.left = `${((d[24]! - cam.cx) * ppw + canvas.width / 2) / dpr}px`;
+    ring.style.top = `${((d[25]! - cam.cy) * ppw + canvas.height / 2) / dpr}px`;
     const px = Math.max(18, (renderData[4]! * ppw * 2) / dpr + 10);
     ring.style.width = `${px}px`;
     ring.style.height = `${px}px`;
@@ -740,6 +743,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     // Predation
     { group: 'cat_predation', labelKey: 'g_predation', idx: 24, min: 0, max: 1, step: 0.05 },
     { group: 'cat_predation', labelKey: 'g_predMargin', idx: 25, min: 1, max: 2.5, step: 0.05 },
+    { group: 'cat_predation', labelKey: 'g_attackCost', idx: 36, min: 0, max: 0.2, step: 0.005 },
     // Cycle
     { group: 'cat_cycle', labelKey: 'g_dayNight', idx: 28, min: 0, max: 0.85, step: 0.05 },
     { group: 'cat_cycle', labelKey: 'g_dayLength', idx: 29, min: 400, max: 4000, step: 100 },
@@ -1054,14 +1058,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const w = watched.get(id);
         if (!w) return;
         const o = k * INSPECT_FLOATS;
-        const sameLineage = Math.round(d[o + 29]!) === w.lineage;
+        const sameLineage = Math.round(d[o + 30]!) === w.lineage;
         const sample: WatchSample = {
           tick: frame,
-          energy: d[o + 27]!,
-          speed: d[o + 26]!,
+          energy: d[o + 28]!,
+          speed: d[o + 27]!,
           turn: d[o + 21]!,
           thrust: (d[o + 22]! + 1) / 2,
-          alive: d[o + 30]! >= 0.5 && sameLineage,
+          alive: d[o + 31]! >= 0.5 && sameLineage,
         };
         w.history.push(sample);
         if (w.history.length > MAX_WORLD_SAMPLES) w.history.shift();
@@ -1554,8 +1558,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         inspectReadback.unmap();
         inspectPending = false;
         if (selectedIndex < 0) return;
-        const alive = d[27]! >= 0.5;
-        const sameLineage = Math.round(d[26]!) === selectedLineage;
+        const alive = d[31]! >= 0.5;
+        const sameLineage = Math.round(d[30]!) === selectedLineage;
         if (alive && sameLineage) {
           brainView.update(d, inspectFrame);
           positionRing(d);

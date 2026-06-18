@@ -26,12 +26,12 @@ struct Params {
 
 const INPUT_SIZE: u32 = 11u;
 const HIDDEN_SIZE: u32 = 10u;
-const OUTPUT_SIZE: u32 = 2u;
-const WEIGHT_GENES: u32 = 142u;
-const SIZE_GENE: u32 = 152u;
-const ELONG_GENE: u32 = 153u;
-const GLOW_GENE: u32 = 155u;
-const GENOME_SIZE: u32 = 156u;
+const OUTPUT_SIZE: u32 = 3u;
+const WEIGHT_GENES: u32 = 153u;
+const SIZE_GENE: u32 = 163u;
+const ELONG_GENE: u32 = 164u;
+const GLOW_GENE: u32 = 166u;
+const GENOME_SIZE: u32 = 167u;
 const NONE: u32 = 0xffffffffu;
 
 fn wrapDelta(d: f32, s: f32) -> f32 {
@@ -172,21 +172,22 @@ fn main() {
     outv[o] = tanh(sum);
   }
 
-  // Write inputs(11) | hidden(10) | outputs(2) | x,y,heading,speed,energy,hue,lineage,alive
+  // Write inputs(11) | hidden(10) | outputs(3) | x,y,heading,speed,energy,hue,lineage,alive
   for (var k = 0u; k < INPUT_SIZE; k = k + 1u) { out[k] = inp[k]; }
   for (var k = 0u; k < HIDDEN_SIZE; k = k + 1u) { out[11u + k] = hidden[k]; }
   out[21] = outv[0];
   out[22] = outv[1];
-  out[23] = s.x;
-  out[24] = s.y;
-  out[25] = s.z;
-  out[26] = s.w;
-  out[27] = b.x;
-  out[28] = b.y;
-  out[29] = b.w;
-  out[30] = b.z;
-  out[31] = activeCount; // Phase 6: how many hidden neurons are switched on
-  out[32] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
-  out[33] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
-  out[34] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
+  out[23] = outv[2]; // attack intent
+  out[24] = s.x;
+  out[25] = s.y;
+  out[26] = s.z;
+  out[27] = s.w;
+  out[28] = b.x;
+  out[29] = b.y;
+  out[30] = b.w;
+  out[31] = b.z;
+  out[32] = activeCount; // Phase 6: how many hidden neurons are switched on
+  out[33] = clamp(1.0 + 0.5 * weights[i * GENOME_SIZE + SIZE_GENE], 0.6, 2.2); // body size
+  out[34] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + ELONG_GENE], 0.5, 2.0); // elongation
+  out[35] = clamp(1.0 + 0.6 * weights[i * GENOME_SIZE + GLOW_GENE], 0.6, 2.0); // glow
 }

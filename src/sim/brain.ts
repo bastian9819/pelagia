@@ -33,10 +33,13 @@ import type { Rng } from '../core/rng.js';
  * Output layout (each in [-1, 1]):
  *   0: turn          steer left/right, scaled to maxTurnRate
  *   1: thrustRaw     mapped to [0, 1] thrust by the loop
+ *   2: attack        attack intent — the creature only preys on a neighbour when
+ *                    this is positive, so predation is an EVOLVED decision (a
+ *                    lineage learns to hunt) rather than an automatic size rule.
  */
 export const INPUT_SIZE = 11;
 export const HIDDEN_SIZE = 10;
-export const OUTPUT_SIZE = 2;
+export const OUTPUT_SIZE = 3;
 
 /** Weights (including biases) per genome, excluding the activation genes. */
 export const WEIGHT_GENES =

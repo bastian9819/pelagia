@@ -84,6 +84,7 @@ const S: Dict = {
   in_speed: { en: 'speed', es: 'velocidad' },
   out_turn: { en: 'turn', es: 'giro' },
   out_thrust: { en: 'thrust', es: 'empuje' },
+  out_attack: { en: 'attack', es: 'ataque' },
   decision: { en: 'decision', es: 'decisión' },
   bv_policy: { en: 'turn vs bearing', es: 'giro según rumbo' },
   bv_food: { en: 'food', es: 'comida' },
@@ -122,6 +123,7 @@ const S: Dict = {
   g_eatRange: { en: 'eat range', es: 'rango de comer' },
   g_turnCost: { en: 'turn cost', es: 'coste de giro' },
   g_glowCost: { en: 'glow cost', es: 'coste de brillo' },
+  g_attackCost: { en: 'attack cost', es: 'coste de ataque' },
   g_bigFoodAmt: { en: 'big-food amount', es: 'cantidad comida grande' },
   g_offspringSpread: { en: 'offspring spread', es: 'dispersión de cría' },
   // God-mode mechanism toggles, scenario presets and the random-world dice.

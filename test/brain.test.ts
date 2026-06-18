@@ -24,9 +24,9 @@ describe('brain architecture', () => {
     expect(WEIGHT_GENES).toBe(
       INPUT_SIZE * HIDDEN_SIZE + HIDDEN_SIZE + HIDDEN_SIZE * OUTPUT_SIZE + OUTPUT_SIZE,
     );
-    expect(WEIGHT_GENES).toBe(142);
+    expect(WEIGHT_GENES).toBe(153);
     expect(GENOME_SIZE).toBe(WEIGHT_GENES + HIDDEN_SIZE + 4); // + size/elong/fin/glow genes
-    expect(GENOME_SIZE).toBe(156);
+    expect(GENOME_SIZE).toBe(167);
   });
 });
 
@@ -36,7 +36,7 @@ describe('forward', () => {
     const s = scratch();
     s.inputs.fill(0.7);
     forward(w, 0, s.inputs, s.hidden, s.outputs);
-    expect(Array.from(s.outputs)).toEqual([0, 0]);
+    expect(Array.from(s.outputs)).toEqual(new Array(OUTPUT_SIZE).fill(0));
   });
 
   it('matches the hand-computed value along a single crafted path', () => {

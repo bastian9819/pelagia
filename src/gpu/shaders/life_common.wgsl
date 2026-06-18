@@ -55,12 +55,12 @@ fn parentIdx(k: u32) -> u32 { return P.d0.z * 2u + 4u + P.d1.x + P.d0.w + k; } /
 fn creatureStartBase() -> u32 { return P.d0.z + 1u; } // cellStart creature region
 fn creatureSortBase() -> u32 { return P.d1.x; }       // sortedIdx creature region (= f)
 
-const WEIGHT_GENES: u32 = 142u; // weights+biases (11 inputs); activation genes follow (one per hidden)
-const SIZE_GENE: u32 = 152u; // body-size gene, after the 10 activation genes
-const ELONG_GENE: u32 = 153u; // elongation (eel <-> blob)
-const FIN_GENE: u32 = 154u; // tail filament (cosmetic)
-const GLOW_GENE: u32 = 155u; // bioluminescence brightness
-const GENOME_SIZE: u32 = 156u; // WEIGHT_GENES + 10 activation + size + elong + fin + glow
+const WEIGHT_GENES: u32 = 153u; // weights+biases (11 in, 3 out); activation genes follow (one per hidden)
+const SIZE_GENE: u32 = 163u; // body-size gene, after the 10 activation genes
+const ELONG_GENE: u32 = 164u; // elongation (eel <-> blob)
+const FIN_GENE: u32 = 165u; // tail filament (cosmetic)
+const GLOW_GENE: u32 = 166u; // bioluminescence brightness
+const GENOME_SIZE: u32 = 167u; // WEIGHT_GENES + 10 activation + size + elong + fin + glow
 const SIZE_MIN: f32 = 0.6;
 const SIZE_MAX: f32 = 2.2;
 const NONE: u32 = 0xffffffffu;

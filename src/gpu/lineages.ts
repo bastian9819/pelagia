@@ -31,7 +31,7 @@ function probe(
   nbrCos = 0,
   nbrSin = 0,
   nbrProx = 0,
-): { turn: number; thrust: number } {
+): { turn: number; thrust: number; attack: number } {
   inp.fill(0);
   inp[0] = planktonCos;
   inp[1] = planktonSin;
@@ -45,7 +45,7 @@ function probe(
   inp[9] = 0.5;
   inp[10] = 0.4;
   forward(genome, 0, inp, hid, out);
-  return { turn: out[0]!, thrust: (out[1]! + 1) / 2 };
+  return { turn: out[0]!, thrust: (out[1]! + 1) / 2, attack: out[2]! };
 }
 
 /** Continuous behavioural traits of a genome + a headline label. */
@@ -64,6 +64,8 @@ export interface LineageTraits {
   turnBias: number;
   /** Phase 6: steer-toward-neighbour strength. >0 hunts, <0 flees others. */
   aggression: number;
+  /** Attack intent (out[2]) when a neighbour is near — >0 means it chooses to prey. */
+  attackDrive: number;
   /** Phase 6: how many hidden neurons this brain has switched on (0..HIDDEN_SIZE). */
   neurons: number;
   /** Phase 6: evolved body-size multiplier. */
@@ -91,12 +93,14 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
   const bigSeek = (bigLeft.turn - bigRight.turn) / 2; // >0 turns toward big food
   const turnBias = (left.turn + right.turn) / 2; // same-way bias -> circling
   const aggression = (nbrLeft.turn - nbrRight.turn) / 2; // >0 turns toward neighbour
+  const attackDrive = (nbrLeft.attack + nbrRight.attack) / 2; // >0 chooses to attack a neighbour
   let neurons = 0;
   for (let h = 0; h < HIDDEN_SIZE; h++) if (genome[WEIGHT_GENES + h]! >= 0) neurons++;
   const size = sizeFromGene(genome[SIZE_GENE]!);
 
   let descKey: string;
-  if (aggression > 0.35) descKey = 'desc_predator';
+  // A real predator now both turns toward AND chooses to attack a neighbour.
+  if (attackDrive > 0.15 && aggression > 0.05) descKey = 'desc_predator';
   else if (aggression < -0.35) descKey = 'desc_skittish';
   else if (bigSeek > 0.3 && bigSeek > seek + 0.12) descKey = 'desc_bigfeeder';
   else if (Math.abs(turnBias) > 0.35 && seek < 0.2) descKey = 'desc_circler';
@@ -116,6 +120,7 @@ export function characterizeGenome(genome: Float32Array): LineageTraits {
     cruise,
     turnBias,
     aggression,
+    attackDrive,
     neurons,
     size,
   };

@@ -4,7 +4,7 @@
 
 const INPUT_SIZE: u32 = 11u;
 const HIDDEN_SIZE: u32 = 10u;
-const OUTPUT_SIZE: u32 = 2u;
+const OUTPUT_SIZE: u32 = 3u;
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -181,13 +181,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
   }
 
-  // Prey on the nearest neighbour if we're enough BIGGER (by body size) and in
-  // contact. The size margin makes mutual predation impossible (can't both be
-  // 1.25x bigger), so a single atomic claim per prey is enough; the predator
-  // credits ITS OWN energy here and the prey is freed in the death pass
-  // (race-free). Reach scales with size, so big slow hunters can still strike.
+  // Prey on the nearest neighbour, but ONLY if the brain CHOSE to attack this
+  // tick (out[2] > 0) and we're enough BIGGER (body size). Predation is now an
+  // evolved DECISION, not an automatic size rule — hunter lineages learn to fire
+  // their attack output near smaller neighbours; foragers leave it off. The size
+  // margin still rules out mutual predation, so a single atomic claim per prey is
+  // enough; the predator credits ITS OWN energy here and the prey is freed in the
+  // death pass (race-free). Reach scales with size, so big slow hunters can strike.
+  let attacking = out[2] > 0.0;
   let gain = P.ext.x;
-  if (gain > 0.0 && nbrIdx != NONE) {
+  if (gain > 0.0 && attacking && nbrIdx != NONE) {
     let preySize = creatureSize(nbrIdx);
     let reach = eatR * size;
     let np = state[nbrIdx];
@@ -203,10 +206,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   // Metabolise. Bigger bodies cost more just to stay alive (size's downside);
-  // turning costs energy too (ext2.w; 0 = free) so agile steering isn't free, and
-  // bioluminescence can cost energy (ext3.z; 0 = free) so glow isn't always free.
+  // turning costs energy too (ext2.w; 0 = free) so agile steering isn't free,
+  // bioluminescence can cost energy (ext3.z; 0 = free), and attacking costs energy
+  // each tick the attack output is on (ext4.x; 0 = free) so indiscriminate
+  // aggression is selected against — the lunge has a price whether or not it lands.
   let glowCost = P.ext3.z * max(0.0, creatureGlow(i) - 1.0);
-  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost);
+  let attackCost = select(0.0, P.ext4.x, attacking);
+  energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost);
   b.x = energy;
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
