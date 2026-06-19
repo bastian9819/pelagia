@@ -14,6 +14,7 @@
  * while the view is open; data keeps accumulating either way (in gpuSim).
  */
 import { t, onLang } from './i18n.js';
+import { icon } from './icons.js';
 import { pcgHash, floatFromU32 } from '../core/rng.js';
 
 /** Lineage colour from its id — matches the GPU's per-creature hue. */
@@ -203,10 +204,9 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
   const h1 = document.createElement('div');
   h1.style.cssText = `font-size:20px;font-weight:600;letter-spacing:.12em;color:${ACCENT};`;
   const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
-  closeBtn.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  closeBtn.className = 'pg-btn pg-iconbtn';
+  closeBtn.innerHTML = icon('close');
+  closeBtn.title = t('close');
   closeBtn.onclick = () => setOpen(false);
   header.append(h1, closeBtn);
   inner.append(header);
@@ -219,9 +219,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
   watchCard.card.style.marginTop = '16px';
 
   const toggle = document.createElement('button');
-  toggle.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  toggle.className = 'pg-btn';
   toggle.onclick = () => setOpen(!open);
 
   function setOpen(v: boolean): void {
@@ -266,7 +264,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
     const phase =
       cur.daylight < 0
         ? ''
-        : ` ${cur.daylight > 0.6 ? '☀ ' + t('nar_day') : cur.daylight < 0.4 ? '🌙 ' + t('nar_night') : '🌅 ' + t('nar_dusk')}.`;
+        : ` ${cur.daylight > 0.6 ? t('nar_day') : cur.daylight < 0.4 ? t('nar_night') : t('nar_dusk')}.`;
     return (
       `${t('nar_pop')} ${cur.alive.toLocaleString()} · ${trend}.${phase} ${pred}. ` +
       `${t('nar_strategy')}: ${strat}. ${t('nar_complexity')} ${meanN} ${t('neurons')} · ` +
@@ -423,9 +421,10 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
         `<b>#${wch.id}</b> · ${t('lineageWord')} #${wch.lineage}` +
         `${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>`;
       const rm = document.createElement('button');
-      rm.textContent = '✕';
+      rm.innerHTML = icon('close', 15);
+      rm.title = t('close');
       rm.style.cssText =
-        'background:none;border:none;color:#cfe8ff;cursor:pointer;font-size:15px;line-height:1;opacity:.7';
+        'background:none;border:none;color:var(--ink-dim);cursor:pointer;line-height:0;padding:2px;';
       rm.onclick = () => onRemoveWatch(wch.id);
       head.append(rm);
       card.append(head);
@@ -470,7 +469,8 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
   }
 
   function relabelToggle(): void {
-    toggle.textContent = '📊 ' + t('observatory');
+    toggle.innerHTML = icon('activity', 16) + `<span>${t('observatory')}</span>`;
+    closeBtn.title = t('close');
   }
   relabelToggle();
   onLang(() => {
@@ -521,10 +521,9 @@ export function buildEvolutionHistory(): HistoryPanel {
   const h1 = document.createElement('div');
   h1.style.cssText = `font-size:20px;font-weight:600;letter-spacing:.12em;color:${ACCENT};`;
   const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
-  closeBtn.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  closeBtn.className = 'pg-btn pg-iconbtn';
+  closeBtn.innerHTML = icon('close');
+  closeBtn.title = t('close');
   closeBtn.onclick = () => setOpen(false);
   header.append(h1, closeBtn);
 
@@ -554,9 +553,7 @@ export function buildEvolutionHistory(): HistoryPanel {
   inner.append(header, note, card, treeCard);
 
   const toggle = document.createElement('button');
-  toggle.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  toggle.className = 'pg-btn';
   toggle.onclick = () => setOpen(!open);
 
   function setOpen(v: boolean): void {
@@ -739,7 +736,8 @@ export function buildEvolutionHistory(): HistoryPanel {
   }
 
   function relabelToggle(): void {
-    toggle.textContent = '🌳 ' + t('ph_history');
+    toggle.innerHTML = icon('branch', 16) + `<span>${t('ph_history')}</span>`;
+    closeBtn.title = t('close');
   }
   relabelToggle();
   onLang(() => {

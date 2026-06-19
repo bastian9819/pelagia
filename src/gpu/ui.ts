@@ -1,8 +1,9 @@
 /**
- * Live stats panel (population + sparkline + fps) and control bar (pause, speed,
- * fit, language). Text is localised via i18n.
+ * Live stats HUD (population + sparkline + fps) and the bottom transport bar
+ * (play/step/speed/fit/colour + a menu of panels). Text is localised via i18n.
  */
 import { t, onLang, toggleLang, getLang } from './i18n.js';
+import { icon, type IconName } from './icons.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16];
 const DEFAULT_SPEED_IDX = 3; // 1x
@@ -27,14 +28,29 @@ export interface ColorControl {
   label(): string;
 }
 
+/** A text (optionally icon-led) button styled with the design system. */
 export function mkBtn(label: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
+  b.className = 'pg-btn';
   b.textContent = label;
-  b.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
   b.onclick = onClick;
   return b;
+}
+
+/** An icon-only button (square). `title` doubles as the accessible label. */
+export function mkIconBtn(name: IconName, title: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = 'pg-btn pg-iconbtn';
+  b.innerHTML = icon(name);
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  b.onclick = onClick;
+  return b;
+}
+
+/** Set an icon + text label on a button (used by menu rows that re-localise). */
+export function setBtnIcon(btn: HTMLButtonElement, name: IconName, label: string): void {
+  btn.innerHTML = icon(name, 16) + `<span>${label}</span>`;
 }
 
 export function buildUi(onFit: () => void, onStep: () => void, color: ColorControl): OceanUi {
@@ -43,81 +59,93 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
   const aliveHistory: number[] = [];
 
   const panel = document.createElement('div');
+  panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;top:12px;left:12px;padding:12px 14px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;' +
-    'color:#cfe8ff;background:rgba(2,4,10,0.62);border:1px solid rgba(63,240,216,0.18);border-radius:10px;' +
-    'min-width:190px;user-select:none;';
+    'position:fixed;top:14px;left:14px;padding:13px 15px;min-width:196px;user-select:none;';
 
   const title = document.createElement('div');
   title.textContent = 'PELAGIA';
-  title.style.cssText = 'font-weight:600;letter-spacing:.14em;color:#3ff0d8;';
+  title.style.cssText =
+    'font-weight:600;letter-spacing:.22em;font-size:12px;color:var(--glow-cyan);';
   const aliveEl = document.createElement('div');
   aliveEl.textContent = '—';
-  aliveEl.style.cssText = 'font-size:24px;margin-top:6px;';
+  aliveEl.style.cssText =
+    'font:600 26px var(--font-mono);margin-top:8px;letter-spacing:.01em;line-height:1;';
   const aliveLabel = document.createElement('div');
-  aliveLabel.style.cssText = 'opacity:.55;font-size:11px;';
+  aliveLabel.style.cssText =
+    'color:var(--ink-faint);font-size:11px;margin-top:3px;letter-spacing:.04em;';
   const spark = document.createElement('canvas');
-  spark.width = 190;
-  spark.height = 38;
-  spark.style.cssText = 'display:block;margin-top:10px;width:190px;height:38px;';
+  spark.width = 392;
+  spark.height = 76;
+  spark.style.cssText = 'display:block;margin-top:12px;width:196px;height:38px;';
   const fpsEl = document.createElement('div');
   fpsEl.textContent = '—';
-  fpsEl.style.cssText = 'opacity:.65;margin-top:8px;';
+  fpsEl.style.cssText = 'color:var(--ink-dim);font:11px var(--font-mono);margin-top:9px;';
   const hint = document.createElement('div');
   hint.style.cssText =
-    'opacity:.45;font-size:11px;margin-top:10px;line-height:1.5;white-space:pre-line;';
+    'color:var(--ink-faint);font-size:11px;margin-top:11px;line-height:1.55;white-space:pre-line;';
   panel.append(title, aliveEl, aliveLabel, spark, fpsEl, hint);
   const sctx = spark.getContext('2d')!;
 
   const controls = document.createElement('div');
+  controls.className = 'pg-panel';
   controls.style.cssText =
-    'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;' +
-    'justify-content:center;max-width:96vw;font:13px ui-monospace,monospace;';
-  const pauseBtn = mkBtn('⏸', () => {
+    'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:6px;' +
+    'align-items:center;padding:7px;border-radius:14px;max-width:96vw;';
+
+  const pauseBtn = mkIconBtn('pause', t('pause'), () => {
     paused = !paused;
-    pauseBtn.textContent = paused ? '▶' : '⏸';
+    pauseBtn.innerHTML = icon(paused ? 'play' : 'pause');
   });
   const speedBtn = mkBtn(`${SPEEDS[speedIdx]!}×`, () => {
     speedIdx = (speedIdx + 1) % SPEEDS.length;
     speedBtn.textContent = `${SPEEDS[speedIdx]}×`;
   });
+  speedBtn.style.minWidth = '46px';
+  speedBtn.style.fontFamily = 'var(--font-mono)';
   // Step: pause, then advance exactly one tick — for studying a decision frame.
-  const stepBtn = mkBtn('⏭', () => {
+  const stepBtn = mkIconBtn('step', t('step'), () => {
     if (!paused) {
       paused = true;
-      pauseBtn.textContent = '▶';
+      pauseBtn.innerHTML = icon('play');
     }
     onStep();
   });
+  const fitBtn = mkIconBtn('fit', t('fit'), onFit);
   const colorBtn = mkBtn('', () => {
     color.cycle();
-    colorBtn.textContent = color.label();
+    setBtnIcon(colorBtn, 'palette', color.label());
   });
 
   // Pop-up menu: everything that isn't constant transport lives here, so the bar
   // stays a single tidy row no matter how many tools we add.
   const menu = document.createElement('div');
+  menu.className = 'pg-panel';
   menu.style.cssText =
-    'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);display:none;' +
-    'flex-direction:column;gap:6px;width:220px;max-height:72vh;overflow:auto;padding:8px;' +
-    'background:rgba(2,4,10,0.92);border:1px solid rgba(63,240,216,0.22);border-radius:10px;z-index:15;';
-  const menuBtn = mkBtn('☰', () => {
+    'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);display:none;' +
+    'flex-direction:column;gap:4px;width:230px;max-height:72vh;overflow:auto;padding:8px;z-index:15;';
+  const menuBtn = mkIconBtn('menu', t('menu'), () => {
     menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
   });
   menu.addEventListener('click', () => (menu.style.display = 'none')); // close after a pick
   window.addEventListener('pointerdown', (e) => {
     const target = e.target as Node;
-    if (menu.style.display !== 'none' && !menu.contains(target) && target !== menuBtn) {
+    if (menu.style.display !== 'none' && !menu.contains(target) && !menuBtn.contains(target)) {
       menu.style.display = 'none';
     }
   });
 
-  controls.append(pauseBtn, speedBtn, stepBtn, mkBtn('⤢ fit', onFit), colorBtn, menuBtn);
+  // Thin separators group the bar: [play step] | [speed] | [fit colour] | [menu].
+  const sep = (): HTMLElement => {
+    const s = document.createElement('span');
+    s.style.cssText = 'width:1px;height:20px;background:var(--border-1);margin:0 2px;';
+    return s;
+  };
+  controls.append(pauseBtn, stepBtn, sep(), speedBtn, sep(), fitBtn, colorBtn, sep(), menuBtn);
 
   const langBtn = mkBtn(getLang().toUpperCase(), () => toggleLang());
   function addTool(btn: HTMLButtonElement): void {
-    btn.style.width = '100%';
-    btn.style.textAlign = 'left';
+    btn.classList.add('pg-row');
     menu.append(btn);
   }
   addTool(langBtn);
@@ -133,7 +161,11 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
     aliveLabel.textContent = t('creaturesAlive');
     hint.textContent = t('hint');
     langBtn.textContent = getLang().toUpperCase();
-    colorBtn.textContent = color.label();
+    setBtnIcon(colorBtn, 'palette', color.label());
+    pauseBtn.title = t('pause');
+    stepBtn.title = t('step');
+    fitBtn.title = t('fit');
+    menuBtn.title = t('menu');
   }
   relabel();
   onLang(relabel);
@@ -145,12 +177,25 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
     if (aliveHistory.length < 2) return;
     let max = 1;
     for (const v of aliveHistory) if (v > max) max = v;
-    sctx.strokeStyle = 'rgba(63,240,216,0.85)';
-    sctx.lineWidth = 1.5;
+    // Soft area fill under the line for a more finished look.
     sctx.beginPath();
     for (let i = 0; i < aliveHistory.length; i++) {
       const x = (i / (aliveHistory.length - 1)) * w;
-      const y = h - (aliveHistory[i]! / max) * (h - 2) - 1;
+      const y = h - (aliveHistory[i]! / max) * (h - 4) - 2;
+      if (i === 0) sctx.moveTo(x, y);
+      else sctx.lineTo(x, y);
+    }
+    sctx.lineTo(w, h);
+    sctx.lineTo(0, h);
+    sctx.closePath();
+    sctx.fillStyle = 'rgba(63,240,216,0.10)';
+    sctx.fill();
+    sctx.strokeStyle = 'rgba(63,240,216,0.9)';
+    sctx.lineWidth = 2;
+    sctx.beginPath();
+    for (let i = 0; i < aliveHistory.length; i++) {
+      const x = (i / (aliveHistory.length - 1)) * w;
+      const y = h - (aliveHistory[i]! / max) * (h - 4) - 2;
       if (i === 0) sctx.moveTo(x, y);
       else sctx.lineTo(x, y);
     }
@@ -166,7 +211,7 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
       aliveEl.textContent = alive.toLocaleString();
       fpsEl.textContent = `${fps.toFixed(0)} fps · tick ${frame.toLocaleString()}`;
       aliveHistory.push(alive);
-      if (aliveHistory.length > 190) aliveHistory.shift();
+      if (aliveHistory.length > 196) aliveHistory.shift();
       drawSpark();
     },
     get paused() {

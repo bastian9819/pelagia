@@ -7,6 +7,7 @@
  * size, [40] elongation, [41] glow, [42] thermal preference, [43] toxicity.
  */
 import { t, onLang } from './i18n.js';
+import { icon } from './icons.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
 
 export interface BrainView {
@@ -71,33 +72,36 @@ function actColor(v: number): string {
 
 export function buildBrainView(onClose: () => void, onTrack: () => void): BrainView {
   const panel = document.createElement('div');
+  panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;top:12px;right:12px;width:348px;max-height:calc(100vh - 24px);overflow:auto;' +
-    'padding:12px 14px;display:none;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;' +
-    'color:#cfe8ff;background:rgba(2,4,10,0.72);border:1px solid rgba(63,240,216,0.22);border-radius:10px;';
+    'position:fixed;top:14px;right:14px;width:348px;max-height:calc(100vh - 28px);overflow:auto;' +
+    'padding:13px 15px;display:none;font:12px var(--font-ui);z-index:8;';
 
   const header = document.createElement('div');
-  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
   const title = document.createElement('div');
-  title.style.cssText = 'font-weight:600;letter-spacing:.1em;color:#3ff0d8;';
+  title.className = 'pg-eyebrow';
   const right = document.createElement('div');
-  right.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  right.style.cssText = 'display:flex;gap:6px;align-items:center;';
   // "Track" pins this creature into the observatory's watch-list.
   const track = document.createElement('button');
-  track.style.cssText =
-    'padding:3px 9px;background:rgba(63,240,216,0.14);color:#cfe8ff;border:1px solid ' +
-    'rgba(63,240,216,0.3);border-radius:7px;cursor:pointer;font:inherit;font-size:11px;';
+  track.className = 'pg-chip';
   let trackTimer = 0;
+  const setTrack = (on: boolean): void => {
+    track.innerHTML =
+      icon(on ? 'check' : 'plus', 13) + `<span>${t(on ? 'tracking' : 'track')}</span>`;
+  };
   track.onclick = () => {
     onTrack();
-    track.textContent = '✓ ' + t('tracking');
+    setTrack(true);
     window.clearTimeout(trackTimer);
-    trackTimer = window.setTimeout(() => (track.textContent = '＋ ' + t('track')), 1200);
+    trackTimer = window.setTimeout(() => setTrack(false), 1200);
   };
   const close = document.createElement('button');
-  close.textContent = '×';
-  close.style.cssText =
-    'background:none;border:none;color:#cfe8ff;font-size:18px;cursor:pointer;line-height:1;';
+  close.className = 'pg-btn pg-iconbtn';
+  close.style.cssText = 'width:28px;height:28px;';
+  close.innerHTML = icon('close', 16);
+  close.title = t('close');
   close.onclick = onClose;
   right.append(track, close);
   header.append(title, right);
@@ -287,11 +291,12 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   }
 
   title.textContent = t('creatureBrain');
-  track.textContent = '＋ ' + t('track');
+  setTrack(false);
   tapeLabel.textContent = t('eeg_title');
   onLang(() => {
     title.textContent = t('creatureBrain');
-    track.textContent = '＋ ' + t('track');
+    setTrack(false);
+    close.title = t('close');
     tapeLabel.textContent = t('eeg_title');
     refreshPolicy();
     drawTape();

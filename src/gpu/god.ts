@@ -4,8 +4,12 @@
  * runtime-safe parameters are exposed (no buffer/grid resize). `idx` is the f32
  * index into the params buffer; `labelKey`/`group` are i18n keys. Sliders are
  * grouped into collapsible categories so the (now large) panel stays navigable.
+ *
+ * The panel is anchored to the LEFT rail (below the stats HUD, above the brush
+ * dock) so it never overlaps the brain inspector, which lives on the right.
  */
 import { t, onLang } from './i18n.js';
+import { icon } from './icons.js';
 
 export interface GodSpec {
   labelKey: string;
@@ -34,13 +38,14 @@ export function buildGodPanel(
   onChange: (idx: number, value: number) => void,
 ): GodPanel {
   const panel = document.createElement('div');
+  panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;right:12px;bottom:72px;width:258px;max-height:80vh;overflow:auto;display:none;' +
-    'padding:12px 14px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;' +
-    'background:rgba(2,4,10,0.72);border:1px solid rgba(63,240,216,0.22);border-radius:10px;';
+    'position:fixed;left:14px;top:236px;width:266px;max-height:calc(100vh - 320px);' +
+    'overflow:auto;display:none;padding:14px 15px;z-index:7;';
 
   const title = document.createElement('div');
-  title.style.cssText = 'font-weight:600;letter-spacing:.1em;color:#3ff0d8;margin-bottom:10px;';
+  title.className = 'pg-eyebrow';
+  title.style.cssText = 'margin-bottom:12px;';
   panel.append(title);
 
   // Slot for callers to inject extra controls (toggles, presets, dice) above the
@@ -66,38 +71,42 @@ export function buildGodPanel(
   for (const group of order) {
     const header = document.createElement('div');
     header.style.cssText =
-      'display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin:6px 0 6px;' +
-      'color:#7fe9d8;letter-spacing:.06em;font-size:11px;';
+      'display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;margin:14px 0 9px;';
     const caret = document.createElement('span');
-    caret.textContent = '▾';
+    caret.style.cssText = 'color:var(--ink-faint);transition:transform .12s ease;display:flex;';
+    caret.innerHTML = icon('step', 12); // chevrons, rotated 90° to point down when open
+    caret.style.transform = 'rotate(90deg)';
     const headLabel = document.createElement('span');
+    headLabel.className = 'pg-eyebrow';
     header.append(caret, headLabel);
 
     const body = document.createElement('div');
     header.onclick = () => {
       const open = body.style.display !== 'none';
       body.style.display = open ? 'none' : 'block';
-      caret.textContent = open ? '▸' : '▾';
+      caret.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
     };
     sections.push({ headEl: headLabel, key: group, caret });
 
     for (const spec of byGroup.get(group)!) {
       const row = document.createElement('div');
-      row.style.cssText = 'margin-bottom:10px;';
+      row.style.cssText = 'margin-bottom:13px;';
       const head = document.createElement('div');
-      head.style.cssText = 'display:flex;justify-content:space-between;opacity:.85;';
+      head.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;';
       const label = document.createElement('span');
+      label.style.cssText = 'font-size:12px;color:var(--ink-dim);';
       const valEl = document.createElement('span');
-      valEl.style.color = '#3ff0d8';
+      valEl.style.cssText = 'color:var(--glow-cyan);font:600 12px var(--font-mono);';
       valEl.textContent = fmt(spec.value);
       head.append(label, valEl);
       const input = document.createElement('input');
       input.type = 'range';
+      input.className = 'pg-range';
       input.min = String(spec.min);
       input.max = String(spec.max);
       input.step = String(spec.step);
       input.value = String(spec.value);
-      input.style.cssText = 'width:100%;accent-color:#3ff0d8;cursor:pointer;';
+      input.style.marginTop = '7px';
       input.addEventListener('input', () => {
         const v = Number(input.value);
         valEl.textContent = fmt(v);
@@ -113,9 +122,8 @@ export function buildGodPanel(
   }
 
   const reset = document.createElement('button');
-  reset.style.cssText =
-    'margin-top:4px;padding:6px 12px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  reset.className = 'pg-btn pg-row';
+  reset.style.marginTop = '14px';
   reset.onclick = () => {
     for (const { input, valEl, spec } of inputs.values()) {
       input.value = String(spec.value);
@@ -126,17 +134,16 @@ export function buildGodPanel(
   panel.append(reset);
 
   const toggle = document.createElement('button');
-  toggle.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  toggle.className = 'pg-btn';
+
   toggle.onclick = () => {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   };
 
   function relabel(): void {
     title.textContent = t('godMode');
-    reset.textContent = t('reset');
-    toggle.textContent = '⚙ ' + t('god');
+    reset.innerHTML = icon('restart', 16) + `<span>${t('reset')}</span>`;
+    toggle.innerHTML = icon('sliders', 16) + `<span>${t('god')}</span>`;
     for (const { el, key } of labels) el.textContent = t(key);
     for (const { headEl, key } of sections) headEl.textContent = t(key);
   }

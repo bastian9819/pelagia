@@ -14,6 +14,11 @@ const S: Dict = {
     es: 'arrastra para mover · rueda para zoom\nclic en una criatura → su cerebro',
   },
   lineages: { en: 'lineages', es: 'linajes' },
+  pause: { en: 'pause / play (space)', es: 'pausa / play (espacio)' },
+  step: { en: 'step one tick', es: 'avanzar un tick' },
+  fit: { en: 'fit to view', es: 'encajar la vista' },
+  menu: { en: 'menu', es: 'menú' },
+  close: { en: 'close', es: 'cerrar' },
   god: { en: 'god', es: 'dios' },
   help: { en: 'help', es: 'ayuda' },
   share: { en: 'share', es: 'compartir' },
@@ -183,13 +188,13 @@ const S: Dict = {
   tog_carrion: { en: 'carrion', es: 'carroña' },
   tog_glow: { en: 'glow', es: 'brillo' },
   scenarios: { en: 'scenarios', es: 'escenarios' },
-  pre_eden: { en: '🌿 Eden', es: '🌿 Edén' },
-  pre_famine: { en: '🍂 Famine', es: '🍂 Hambruna' },
-  pre_carnage: { en: '🦈 Carnage', es: '🦈 Carnicería' },
-  pre_soup: { en: '🧬 Primordial soup', es: '🧬 Sopa primordial' },
-  pre_night: { en: '🌑 Eternal night', es: '🌑 Noche eterna' },
-  pre_titans: { en: '🐋 Titans', es: '🐋 Titanes' },
-  pre_dice: { en: '🎲 Random world', es: '🎲 Mundo aleatorio' },
+  pre_eden: { en: 'Eden', es: 'Edén' },
+  pre_famine: { en: 'Famine', es: 'Hambruna' },
+  pre_carnage: { en: 'Carnage', es: 'Carnicería' },
+  pre_soup: { en: 'Primordial soup', es: 'Sopa primordial' },
+  pre_night: { en: 'Eternal night', es: 'Noche eterna' },
+  pre_titans: { en: 'Titans', es: 'Titanes' },
+  pre_dice: { en: 'Random world', es: 'Mundo aleatorio' },
   g_food: { en: 'food spawn', es: 'aparición de comida' },
   g_mutRate: { en: 'mutation rate', es: 'tasa de mutación' },
   g_mutSize: { en: 'mutation size', es: 'tamaño de mutación' },
@@ -215,6 +220,7 @@ const S: Dict = {
   g_dayLength: { en: 'day length', es: 'duración del día' },
   obs_predation: { en: 'predation', es: 'depredación' },
   tr_aggr: { en: 'aggression', es: 'agresión' },
+  tr_neurons: { en: 'neurons', es: 'neuronas' },
   loading: { en: 'summoning the ocean…', es: 'invocando el océano…' },
   desc_bigfeeder: { en: 'targets big-food blooms', es: 'busca floraciones de comida grande' },
   desc_chase: { en: 'chases food head-on', es: 'persigue la comida de frente' },
@@ -249,12 +255,12 @@ const S: Dict = {
       'bioluminescence becomes an ornament that runs away over generations (mate choice).<br>' +
       '• <b>God mode</b>: change the world (food, mutation, predation…) and watch ' +
       'evolution respond.<br>' +
-      '• <b>Observatory</b> (📊): charts of the world over time, lineage histories, and ' +
+      '• <b>Observatory</b>: charts of the world over time, lineage histories, and ' +
       'any creatures you track.<br>' +
-      '• <b>🎨 Colour</b> the ocean by a trait (size, neurons, energy…) to watch evolution ' +
-      'sweep across it; <b>⏭ step</b> one tick and <b>0.1×</b> slow-mo to study a decision.<br>' +
-      '• <b>Brush tools</b> (bottom-left): drag over the ocean to attract 🧲, repel 💨, ' +
-      'feed 🍤, heal ✨, seed 🌱, mutate ☢️ or smite ☄️ creatures — a hand of god.<br>' +
+      '• <b>Colour</b> the ocean by a trait (size, neurons, energy…) to watch evolution ' +
+      'sweep across it; <b>step</b> one tick and <b>0.1×</b> slow-mo to study a decision.<br>' +
+      '• <b>Brush tools</b> (bottom-left): drag over the ocean to attract, repel, ' +
+      'feed, heal, seed, mutate or smite creatures — a hand of god.<br>' +
       '• <b>Drag</b> to pan, <b>scroll</b> to zoom, <b>space</b> to pause, <b>H</b> to hide the UI.',
     es:
       '<b>PELAGIA</b> es un océano de vida artificial. Cada mota es una criatura con una ' +
@@ -279,13 +285,13 @@ const S: Dict = {
       'generaciones (elección de pareja).<br>' +
       '• <b>Modo dios</b>: cambia el mundo (comida, mutación, depredación…) y mira cómo ' +
       'responde la evolución.<br>' +
-      '• <b>Observatorio</b> (📊): gráficas del mundo en el tiempo, historia de los ' +
+      '• <b>Observatorio</b>: gráficas del mundo en el tiempo, historia de los ' +
       'linajes y las criaturas que sigas.<br>' +
-      '• <b>🎨 Colorea</b> el océano por un rasgo (tamaño, neuronas, energía…) para ver la ' +
-      'evolución recorrerlo; <b>⏭ paso</b> a paso y cámara lenta <b>0.1×</b> para estudiar una ' +
+      '• <b>Colorea</b> el océano por un rasgo (tamaño, neuronas, energía…) para ver la ' +
+      'evolución recorrerlo; <b>paso</b> a paso y cámara lenta <b>0.1×</b> para estudiar una ' +
       'decisión.<br>' +
-      '• <b>Pinceles</b> (abajo-izquierda): arrastra sobre el océano para atraer 🧲, espantar ' +
-      '💨, alimentar 🍤, curar ✨, sembrar 🌱, mutar ☢️ o aniquilar ☄️ criaturas — mano de dios.<br>' +
+      '• <b>Pinceles</b> (abajo-izquierda): arrastra sobre el océano para atraer, espantar, ' +
+      'alimentar, curar, sembrar, mutar o aniquilar criaturas — mano de dios.<br>' +
       '• <b>Arrastra</b> para mover, <b>rueda</b> para zoom, <b>espacio</b> para pausar, ' +
       '<b>H</b> para ocultar la interfaz.',
   },

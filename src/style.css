@@ -4,7 +4,27 @@
   --deep: #061229;
   --glow-cyan: #3ff0d8;
   --glow-blue: #4aa8ff;
-  --ink: #cfe8ff;
+  --ink: #e6f0fb;
+  --ink-dim: rgba(214, 232, 250, 0.62);
+  --ink-faint: rgba(214, 232, 250, 0.4);
+
+  /* Surfaces + chrome (restrained, glassy — not neon-on-everything). */
+  --surface-1: rgba(7, 15, 30, 0.78);
+  --surface-2: rgba(255, 255, 255, 0.04);
+  --surface-2-hover: rgba(255, 255, 255, 0.09);
+  --surface-active: rgba(63, 240, 216, 0.14);
+  --border-1: rgba(150, 190, 225, 0.14);
+  --border-2: rgba(150, 190, 225, 0.26);
+  --border-active: rgba(63, 240, 216, 0.55);
+
+  /* Geometry + typography. */
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 13px;
+  --ctl-h: 34px;
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -18,15 +38,7 @@ body {
   height: 100%;
   background: var(--abyss);
   color: var(--ink);
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
+  font-family: var(--font-ui);
   overflow: hidden;
 }
 
@@ -34,6 +46,187 @@ body {
   display: block;
   width: 100vw;
   height: 100vh;
+}
+
+/* ---- Design-system components (shared across the UI) ------------------- */
+
+.pg-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Small letter-spaced eyebrow label for panel/section headers. */
+.pg-eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+/* Generic control: text or icon+text button. */
+.pg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: var(--ctl-h);
+  padding: 0 12px;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  font: 500 12.5px var(--font-ui);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition:
+    background 0.13s ease,
+    border-color 0.13s ease,
+    color 0.13s ease;
+}
+.pg-btn:hover {
+  background: var(--surface-2-hover);
+  border-color: var(--border-2);
+}
+.pg-btn:active {
+  transform: translatey(0.5px);
+}
+
+/* Square icon-only button (transport, brush dock). */
+.pg-iconbtn {
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  gap: 0;
+}
+
+/* Active / selected state (current tool, enabled toggle). */
+.pg-btn.is-active {
+  background: var(--surface-active);
+  border-color: var(--border-active);
+  color: var(--glow-cyan);
+}
+
+/* Full-width row button inside a menu/list. */
+.pg-row {
+  width: 100%;
+  justify-content: flex-start;
+  height: 32px;
+}
+
+/* Compact pill (presets, tags). */
+.pg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  background: var(--surface-2);
+  color: var(--ink-dim);
+  border: 1px solid var(--border-1);
+  border-radius: 999px;
+  font: 500 11.5px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.13s ease,
+    color 0.13s ease,
+    border-color 0.13s ease;
+}
+.pg-chip:hover {
+  background: var(--surface-2-hover);
+  color: var(--ink);
+}
+
+/* Toggle switch (on/off mechanism). */
+.pg-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-radius: 999px;
+  font: 500 11.5px var(--font-ui);
+  color: var(--ink-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-switch .pg-knob {
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  position: relative;
+  flex: none;
+  transition: background 0.15s ease;
+}
+.pg-switch .pg-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ink-dim);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+.pg-switch.is-on {
+  color: var(--ink);
+  border-color: var(--border-active);
+}
+.pg-switch.is-on .pg-knob {
+  background: rgba(63, 240, 216, 0.35);
+}
+.pg-switch.is-on .pg-knob::after {
+  transform: translatex(11px);
+  background: var(--glow-cyan);
+}
+
+/* Range slider, themed. */
+input[type='range'].pg-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+input[type='range'].pg-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--glow-cyan);
+  border: 2px solid var(--abyss);
+  box-shadow: 0 0 8px rgba(63, 240, 216, 0.5);
+}
+input[type='range'].pg-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--abyss);
+  border-radius: 50%;
+  background: var(--glow-cyan);
+}
+
+.pg-divider {
+  height: 1px;
+  background: var(--border-1);
+  border: 0;
+  margin: 12px 0;
 }
 
 /* Loading screen shown while the GPU ocean initialises. */
@@ -60,7 +253,7 @@ body {
 .loading-sub {
   margin-top: 0.6rem;
   font-size: clamp(0.7rem, 2.2vw, 1rem);
-  color: rgba(207, 232, 255, 0.6);
+  color: var(--ink-dim);
   text-align: center;
   animation: pelagia-pulse 1.8s ease-in-out infinite;
 }
@@ -85,7 +278,7 @@ body {
   font-size: 13px;
   color: var(--ink);
   background: rgba(11, 31, 58, 0.92);
-  border-bottom: 1px solid rgba(63, 240, 216, 0.25);
+  border-bottom: 1px solid var(--border-2);
   z-index: 9;
 }
 .banner a {

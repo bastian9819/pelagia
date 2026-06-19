@@ -23,7 +23,8 @@ import {
 import { pcgHash, floatFromU32, Rng } from '../core/rng.js';
 import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
-import { buildUi, mkBtn } from './ui.js';
+import { buildUi, mkBtn, mkIconBtn, setBtnIcon } from './ui.js';
+import { icon, type IconName } from './icons.js';
 import { buildBrainView } from './brainView.js';
 import {
   buildLineagePanel,
@@ -775,18 +776,19 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   // --- Brush toolbar (bottom-left): pick a tool, then drag over the ocean. ---
   const brushBar = document.createElement('div');
+  brushBar.className = 'pg-panel';
   brushBar.style.cssText =
-    'position:fixed;left:12px;bottom:16px;display:flex;gap:6px;align-items:center;z-index:6;' +
-    'padding:6px 8px;background:rgba(2,4,10,0.6);border:1px solid rgba(63,240,216,0.18);border-radius:10px;';
-  const brushTools = [
-    { tool: 0, icon: '✋', key: 'tool_pan' },
-    { tool: 1, icon: '🧲', key: 'tool_attract' },
-    { tool: 2, icon: '💨', key: 'tool_repel' },
-    { tool: 3, icon: '🍤', key: 'tool_food' },
-    { tool: 7, icon: '✨', key: 'tool_heal' },
-    { tool: 5, icon: '🌱', key: 'tool_seed' },
-    { tool: 6, icon: '☢️', key: 'tool_mutagen' },
-    { tool: 4, icon: '☄️', key: 'tool_smite' },
+    'position:fixed;left:14px;bottom:18px;display:flex;gap:4px;align-items:center;z-index:6;' +
+    'padding:7px;border-radius:14px;';
+  const brushTools: { tool: number; icon: IconName; key: string }[] = [
+    { tool: 0, icon: 'move', key: 'tool_pan' },
+    { tool: 1, icon: 'magnet', key: 'tool_attract' },
+    { tool: 2, icon: 'wind', key: 'tool_repel' },
+    { tool: 3, icon: 'droplets', key: 'tool_food' },
+    { tool: 7, icon: 'heart', key: 'tool_heal' },
+    { tool: 5, icon: 'sprout', key: 'tool_seed' },
+    { tool: 6, icon: 'flask', key: 'tool_mutagen' },
+    { tool: 4, icon: 'flame', key: 'tool_smite' },
   ];
   const brushBtns: { b: HTMLButtonElement; def: (typeof brushTools)[number] }[] = [];
   function setTool(tool: number): void {
@@ -796,26 +798,25 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       painting = false;
       writeBrushParams();
     }
-    for (const { b, def } of brushBtns) {
-      const on = def.tool === tool;
-      b.style.borderColor = on ? 'rgba(63,240,216,0.9)' : 'rgba(63,240,216,0.25)';
-      b.style.background = on ? 'rgba(63,240,216,0.18)' : 'rgba(11,31,58,0.85)';
-    }
+    for (const { b, def } of brushBtns) b.classList.toggle('is-active', def.tool === tool);
   }
   for (const def of brushTools) {
-    const b = mkBtn(def.icon, () => setTool(def.tool));
-    b.title = t(def.key);
+    const b = mkIconBtn(def.icon, t(def.key), () => setTool(def.tool));
     brushBtns.push({ b, def });
     brushBar.append(b);
   }
+  const brushSep = document.createElement('span');
+  brushSep.style.cssText = 'width:1px;height:20px;background:var(--border-1);margin:0 3px;';
+  brushBar.append(brushSep);
   const sizeInput = document.createElement('input');
   sizeInput.type = 'range';
+  sizeInput.className = 'pg-range';
   sizeInput.min = '40';
   sizeInput.max = '300';
   sizeInput.step = '10';
   sizeInput.value = String(BRUSH.radius);
   sizeInput.title = t('tool_size');
-  sizeInput.style.cssText = 'width:64px;accent-color:#3ff0d8;cursor:pointer;';
+  sizeInput.style.cssText = 'width:70px;margin:0 4px;';
   sizeInput.addEventListener('input', () => {
     BRUSH.radius = Number(sizeInput.value);
     if (painting) writeBrushParams();
@@ -886,7 +887,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         renderData[6] = colorMode;
         device.queue.writeBuffer(renderUbo, 0, renderData);
       },
-      label: () => '🎨 ' + t(COLOR_MODES[colorMode]!),
+      label: () => t(COLOR_MODES[colorMode]!),
     },
   );
   document.body.appendChild(ui.panel);
@@ -1061,6 +1062,15 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   document.body.appendChild(godPanel.panel);
   ui.addTool(godPanel.toggle);
 
+  // God mode and the lineage panel share the left rail, so only one shows at a
+  // time — opening one closes the other (no overlapping panels).
+  godPanel.toggle.addEventListener('click', () => {
+    lineagePanel.panel.style.display = 'none';
+  });
+  lineagePanel.toggle.addEventListener('click', () => {
+    godPanel.panel.style.display = 'none';
+  });
+
   // --- Mechanism toggles + scenario presets + random-world dice -------------
   // All drive the same god sliders, so changes are captured by sharing and the
   // slider thumbs stay in sync. applyParams writes the uniform once per action.
@@ -1079,15 +1089,15 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   const mkChip = (onClick: () => void): HTMLButtonElement => {
     const b = document.createElement('button');
-    b.style.cssText =
-      'padding:4px 8px;margin:0 4px 4px 0;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-      'border:1px solid rgba(63,240,216,0.25);border-radius:7px;cursor:pointer;font:inherit;font-size:11px;';
+    b.className = 'pg-chip';
+    b.style.margin = '0 5px 5px 0';
     b.onclick = onClick;
     return b;
   };
   const mkSectionLabel = (key: string): HTMLElement => {
     const el = document.createElement('div');
-    el.style.cssText = 'color:#7fe9d8;letter-spacing:.06em;font-size:11px;margin:2px 0 6px;';
+    el.className = 'pg-eyebrow';
+    el.style.cssText = 'margin:4px 0 8px;';
     el.dataset.i18n = key;
     el.textContent = t(key);
     return el;
@@ -1105,14 +1115,22 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const toggleBtns: { btn: HTMLButtonElement; def: (typeof toggleDefs)[number] }[] = [];
   function refreshToggles(): void {
     for (const { btn, def } of toggleBtns) {
-      btn.textContent = (pf[def.idx]! > 0 ? '☑ ' : '☐ ') + t(def.key);
+      const on = pf[def.idx]! > 0;
+      btn.classList.toggle('is-on', on);
+      const label = btn.querySelector('span:last-child');
+      if (label) label.textContent = t(def.key);
     }
   }
   const togWrap = document.createElement('div');
-  togWrap.style.cssText = 'margin-bottom:8px;';
-  togWrap.append(mkSectionLabel('mechanisms'));
+  togWrap.style.cssText = 'margin-bottom:10px;display:flex;flex-wrap:wrap;gap:5px;';
+  const togHead = mkSectionLabel('mechanisms');
+  togHead.style.width = '100%';
+  togWrap.append(togHead);
   for (const def of toggleDefs) {
-    const btn = mkChip(() => applyParams([[def.idx, pf[def.idx]! > 0 ? 0 : def.on]]));
+    const btn = document.createElement('button');
+    btn.className = 'pg-switch';
+    btn.innerHTML = '<span class="pg-knob"></span><span></span>';
+    btn.onclick = () => applyParams([[def.idx, pf[def.idx]! > 0 ? 0 : def.on]]);
     toggleBtns.push({ btn, def });
     togWrap.append(btn);
   }
@@ -1161,7 +1179,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function relabelGodExtras(): void {
     refreshToggles();
     for (const { btn, key } of presetBtns) btn.textContent = t(key);
-    diceBtn.textContent = t('pre_dice');
+    diceBtn.innerHTML = icon('shuffle', 14) + `<span>${t('pre_dice')}</span>`;
     for (const el of godPanel.extras.querySelectorAll<HTMLElement>('[data-i18n]')) {
       el.textContent = t(el.dataset.i18n!);
     }
@@ -1173,14 +1191,14 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let shareFeedbackTimer = 0;
   const shareBtn = mkBtn('', () => void onShare());
   function relabelShare(): void {
-    shareBtn.textContent = '🔗 ' + t('share');
+    setBtnIcon(shareBtn, 'link', t('share'));
   }
   async function onShare(): Promise<void> {
     const state = { seed, n, params: godPanel.getValues() };
     applyHash(state); // reflect the current ocean in the address bar
     const ok = await copyToClipboard(buildShareUrl(state));
     window.clearTimeout(shareFeedbackTimer);
-    shareBtn.textContent = ok ? '✓ ' + t('copied') : '🔗 ' + t('share');
+    setBtnIcon(shareBtn, ok ? 'check' : 'link', ok ? t('copied') : t('share'));
     shareFeedbackTimer = window.setTimeout(relabelShare, 1500);
   }
   relabelShare();
@@ -1190,7 +1208,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // --- Restart: reseed the ocean in place (same seed + current params, no reload) ---
   const resetBtn = mkBtn('', () => resetOcean());
   function relabelReset(): void {
-    resetBtn.textContent = '↻ ' + t('restart');
+    setBtnIcon(resetBtn, 'restart', t('restart'));
   }
   relabelReset();
   onLang(relabelReset);
@@ -1199,39 +1217,33 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // --- Help / pedagogical panel ---
   const help = document.createElement('div');
   help.style.cssText =
-    'position:fixed;inset:0;display:none;place-items:center;z-index:20;background:rgba(2,4,10,0.65);';
+    'position:fixed;inset:0;display:none;place-items:center;z-index:20;background:rgba(2,4,10,0.7);' +
+    '-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);';
   const helpCard = document.createElement('div');
+  helpCard.className = 'pg-panel';
   helpCard.style.cssText =
-    'max-width:520px;margin:16px;padding:24px 26px;background:rgba(6,18,41,0.97);' +
-    'border:1px solid rgba(63,240,216,0.3);border-radius:14px;color:#cfe8ff;' +
-    'font:14px/1.65 ui-sans-serif,system-ui,sans-serif;';
+    'max-width:540px;margin:16px;padding:26px 28px;font:14px/1.7 var(--font-ui);position:relative;';
   const helpTitle = document.createElement('div');
-  helpTitle.style.cssText = 'font-size:20px;font-weight:600;color:#3ff0d8;margin-bottom:12px;';
+  helpTitle.style.cssText =
+    'font-size:19px;font-weight:600;letter-spacing:.02em;color:var(--glow-cyan);margin-bottom:14px;';
   const helpBody = document.createElement('div');
-  const helpClose = document.createElement('button');
-  helpClose.textContent = '✕';
-  helpClose.style.cssText =
-    'margin-top:16px;padding:8px 16px;background:rgba(63,240,216,0.15);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.3);border-radius:8px;cursor:pointer;font:inherit;';
-  helpClose.onclick = () => (help.style.display = 'none');
-  helpCard.append(helpTitle, helpBody, helpClose);
+  helpBody.style.color = 'var(--ink-dim)';
+  const helpClose = mkIconBtn('close', t('close'), () => (help.style.display = 'none'));
+  helpClose.style.cssText += 'position:absolute;top:14px;right:14px;';
+  helpCard.append(helpClose, helpTitle, helpBody);
   help.append(helpCard);
   help.addEventListener('click', (e) => {
     if (e.target === help) help.style.display = 'none';
   });
   document.body.appendChild(help);
 
-  const helpToggle = document.createElement('button');
-  helpToggle.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
-  helpToggle.onclick = () => (help.style.display = 'grid');
-  ui.addTool(helpToggle);
+  const helpToggle = mkBtn('', () => (help.style.display = 'grid'));
 
   function relabelHelp(): void {
     helpTitle.textContent = t('helpTitle');
     helpBody.innerHTML = t('helpBody');
-    helpToggle.textContent = '? ' + t('help');
+    helpToggle.textContent = '?  ' + t('help');
+    helpClose.title = t('close');
   }
   relabelHelp();
   onLang(relabelHelp);
@@ -1278,7 +1290,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     relabelHighlight();
   });
   function relabelHighlight(): void {
-    highlightBtn.textContent = (highlightOn ? '🔦 ' : '○ ') + t('highlight');
+    setBtnIcon(highlightBtn, 'focus', t('highlight'));
+    highlightBtn.classList.toggle('is-active', highlightOn);
   }
   relabelHighlight();
   onLang(relabelHighlight);
@@ -1290,7 +1303,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     relabelFields();
   });
   function relabelFields(): void {
-    fieldsBtn.textContent = (fieldTint > 0 ? '🌡 ' : '○ ') + t('showFields');
+    setBtnIcon(fieldsBtn, 'thermometer', t('showFields'));
+    fieldsBtn.classList.toggle('is-active', fieldTint > 0);
   }
   relabelFields();
   onLang(relabelFields);
@@ -1302,7 +1316,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     relabelFollow();
   });
   function relabelFollow(): void {
-    followBtn.textContent = (lockOn ? '🎯 ' : '○ ') + t('followCam');
+    setBtnIcon(followBtn, 'crosshair', t('followCam'));
+    followBtn.classList.toggle('is-active', lockOn);
   }
   relabelFollow();
   onLang(relabelFollow);
@@ -1314,7 +1329,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     relabelCurrent();
   });
   function relabelCurrent(): void {
-    currentBtn.textContent = (currentViz ? '🌀 ' : '○ ') + t('showCurrents');
+    setBtnIcon(currentBtn, 'waves', t('showCurrents'));
+    currentBtn.classList.toggle('is-active', currentViz);
   }
   relabelCurrent();
   onLang(relabelCurrent);
@@ -1326,7 +1342,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     relabelPhero();
   });
   function relabelPhero(): void {
-    pheroBtn.textContent = (pheroViz ? '🟢 ' : '○ ') + t('showPheromones');
+    setBtnIcon(pheroBtn, 'route', t('showPheromones'));
+    pheroBtn.classList.toggle('is-active', pheroViz);
   }
   relabelPhero();
   onLang(relabelPhero);

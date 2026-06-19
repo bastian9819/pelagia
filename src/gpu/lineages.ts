@@ -15,6 +15,7 @@ import {
   sizeFromGene,
 } from '../sim/brain.js';
 import { t, onLang } from './i18n.js';
+import { icon } from './icons.js';
 
 const inp = new Float32Array(INPUT_SIZE);
 const hid = new Float32Array(HIDDEN_SIZE);
@@ -151,19 +152,19 @@ export interface LineagePanel {
 
 export function buildLineagePanel(): LineagePanel {
   const panel = document.createElement('div');
+  panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;left:12px;top:232px;width:248px;max-height:50vh;overflow:auto;display:none;' +
-    'padding:12px 14px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;' +
-    'background:rgba(2,4,10,0.66);border:1px solid rgba(63,240,216,0.18);border-radius:10px;';
+    'position:fixed;left:14px;top:236px;width:266px;max-height:calc(100vh - 320px);overflow:auto;' +
+    'display:none;padding:14px 15px;z-index:7;';
   const title = document.createElement('div');
-  title.style.cssText = 'font-weight:600;letter-spacing:.1em;color:#3ff0d8;margin-bottom:8px;';
+  title.className = 'pg-eyebrow';
+  title.style.cssText = 'margin-bottom:10px;';
   const list = document.createElement('div');
+  list.style.cssText = 'font:12px var(--font-ui);';
   panel.append(title, list);
 
   const toggle = document.createElement('button');
-  toggle.style.cssText =
-    'padding:8px 14px;background:rgba(11,31,58,0.85);color:#cfe8ff;' +
-    'border:1px solid rgba(63,240,216,0.25);border-radius:8px;cursor:pointer;font:inherit;';
+  toggle.className = 'pg-btn';
   toggle.onclick = () => {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   };
@@ -178,7 +179,7 @@ export function buildLineagePanel(): LineagePanel {
       `${t('tr_seek')} ${r.seek.toFixed(2)} · ` +
       `${t('tr_big')} ${r.bigSeek.toFixed(2)} · ` +
       `${t('tr_aggr')} ${r.aggression.toFixed(2)} · ` +
-      `${r.neurons}🧠`;
+      `${r.neurons} ${t('tr_neurons')}`;
     return (
       `<div style="margin-bottom:9px;line-height:1.45">` +
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
@@ -189,12 +190,12 @@ export function buildLineagePanel(): LineagePanel {
   }
   function sectionHtml(key: string, rows: LineageRow[]): string {
     if (rows.length === 0) return '';
-    const head = `<div style="opacity:.55;letter-spacing:.08em;margin:2px 0 6px">${t(key)}</div>`;
+    const head = `<div class="pg-eyebrow" style="margin:12px 0 7px">${t(key)}</div>`;
     return head + rows.map(rowHtml).join('');
   }
   function render(): void {
     title.textContent = t('lineages');
-    toggle.textContent = '🧬 ' + t('lineages');
+    toggle.innerHTML = icon('list', 16) + `<span>${t('lineages')}</span>`;
     if (lastRows.length === 0) {
       list.innerHTML = `<div style="opacity:.5">${t('sampling')}</div>`;
       return;
