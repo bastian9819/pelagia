@@ -899,6 +899,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let selectedLineage = -1; // to detect slot reuse (a different creature took the slot)
   let selecting = false;
   let inspectPending = false;
+  // Last sample while the selected creature was alive — so that when it dies we can
+  // freeze the panel on its final state even if a newborn has already taken its slot.
+  let lastGoodSample: Float32Array | null = null;
   const brainView = buildBrainView(
     () => deselect(),
     () => {
@@ -918,6 +921,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function deselect(): void {
     selectedIndex = -1;
     selectedLineage = -1;
+    lastGoodSample = null;
     setSelectedUniform();
     applyHighlight();
     brainView.hide();
@@ -987,6 +991,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     if (best >= 0) {
       selectedIndex = best;
       selectedLineage = Math.round(bi[best * 4 + 3]!);
+      lastGoodSample = null; // fresh selection; captured on the first live frame
       setSelectedUniform();
       applyHighlight();
       brainView.show();
@@ -1918,6 +1923,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         const alive = d[37]! >= 0.5;
         const sameLineage = Math.round(d[36]!) === selectedLineage;
         if (alive && sameLineage) {
+          lastGoodSample = d.slice(); // remember the last living frame
           brainView.update(d, inspectFrame);
           if (lockOn) {
             cam.cx = d[30]!; // creature world x
@@ -1926,16 +1932,22 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
             updateView();
           }
           positionRing(d);
-        } else if (!alive && sameLineage) {
-          // Our creature died: show it deceased once, then stop following.
-          brainView.update(d, inspectFrame);
-          ring.style.display = 'none';
-          selectedIndex = -1;
-          setSelectedUniform();
         } else {
-          // The slot was reused by a different creature — drop the selection
-          // rather than silently follow the impostor.
-          deselect();
+          // The selected creature died. Either its slot is now empty (same lineage,
+          // not alive) or a newborn has already taken its slot (different lineage).
+          // Either way, freeze the panel on its final state shown as deceased —
+          // never let a selected creature silently vanish — then stop following.
+          const finalSample = sameLineage ? d : lastGoodSample;
+          ring.style.display = 'none';
+          if (finalSample) {
+            finalSample[37] = 0; // mark deceased
+            brainView.update(finalSample, inspectFrame);
+            selectedIndex = -1;
+            setSelectedUniform();
+          } else {
+            // Died before we ever captured a living frame — nothing to show.
+            deselect();
+          }
         }
       });
     }
