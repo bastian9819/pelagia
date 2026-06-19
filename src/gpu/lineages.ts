@@ -16,6 +16,7 @@ import {
 } from '../sim/brain.js';
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
+import { makeDraggable, mkPanelHeader } from './ui.js';
 
 const inp = new Float32Array(INPUT_SIZE);
 const hid = new Float32Array(HIDDEN_SIZE);
@@ -154,19 +155,19 @@ export function buildLineagePanel(): LineagePanel {
   const panel = document.createElement('div');
   panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;left:14px;top:236px;width:266px;max-height:calc(100vh - 320px);overflow:auto;' +
-    'display:none;padding:14px 15px;z-index:7;';
-  const title = document.createElement('div');
-  title.className = 'pg-eyebrow';
-  title.style.cssText = 'margin-bottom:10px;';
+    'position:fixed;left:320px;top:80px;width:266px;max-height:calc(100vh - 60px);' +
+    'display:none;flex-direction:column;overflow:hidden;padding:14px 15px;z-index:10;';
+  const { header: phead, title } = mkPanelHeader(() => (panel.style.display = 'none'));
+  panel.append(phead);
+  makeDraggable(panel, phead);
   const list = document.createElement('div');
-  list.style.cssText = 'font:12px var(--font-ui);';
-  panel.append(title, list);
+  list.style.cssText = 'font:12px var(--font-ui);overflow:auto;flex:1;';
+  panel.append(list);
 
   const toggle = document.createElement('button');
   toggle.className = 'pg-btn';
   toggle.onclick = () => {
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
   };
 
   let lastRows: LineageRow[] = [];

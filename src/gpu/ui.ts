@@ -53,6 +53,80 @@ export function setBtnIcon(btn: HTMLButtonElement, name: IconName, label: string
   btn.innerHTML = icon(name, 16) + `<span>${label}</span>`;
 }
 
+// Floating panels: each can be open at once and dragged anywhere, so they coexist
+// instead of fighting for one slot. Clicking/dragging a panel raises it above the
+// others (overlays like the menu/help/observatory sit far higher, in the thousands).
+let panelZ = 10;
+export function bringToFront(panel: HTMLElement): void {
+  panelZ += 1;
+  panel.style.zIndex = String(panelZ);
+}
+
+/** Make `panel` draggable by `handle` (its header), kept within the viewport. */
+export function makeDraggable(panel: HTMLElement, handle: HTMLElement): void {
+  handle.style.cursor = 'move';
+  handle.style.touchAction = 'none';
+  let dragging = false;
+  let sx = 0;
+  let sy = 0;
+  let ox = 0;
+  let oy = 0;
+  panel.addEventListener('pointerdown', () => bringToFront(panel), true);
+  handle.addEventListener('pointerdown', (e) => {
+    if ((e.target as HTMLElement).closest('button')) return; // let header buttons work
+    dragging = true;
+    bringToFront(panel);
+    const r = panel.getBoundingClientRect();
+    panel.style.left = `${r.left}px`;
+    panel.style.top = `${r.top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    sx = e.clientX;
+    sy = e.clientY;
+    ox = r.left;
+    oy = r.top;
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const nx = Math.max(4, Math.min(window.innerWidth - 60, ox + (e.clientX - sx)));
+    const ny = Math.max(4, Math.min(window.innerHeight - 40, oy + (e.clientY - sy)));
+    panel.style.left = `${nx}px`;
+    panel.style.top = `${ny}px`;
+  });
+  const end = (e: PointerEvent): void => {
+    dragging = false;
+    try {
+      handle.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}
+
+/**
+ * A draggable panel header: an eyebrow title on the left and a close (×) button on
+ * the right. Returns the header (the drag handle) + the title element to fill in.
+ */
+export function mkPanelHeader(onClose: () => void): { header: HTMLElement; title: HTMLElement } {
+  const header = document.createElement('div');
+  header.style.cssText =
+    'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px;flex:none;';
+  const title = document.createElement('div');
+  title.className = 'pg-eyebrow';
+  const x = mkIconBtn('close', t('close'), onClose);
+  x.style.cssText += 'width:26px;height:26px;';
+  header.append(title, x);
+  return { header, title };
+}
+
 export function buildUi(onFit: () => void, onStep: () => void, color: ColorControl): OceanUi {
   let paused = false;
   let speedIdx = DEFAULT_SPEED_IDX;
@@ -123,7 +197,7 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
   menu.className = 'pg-panel';
   menu.style.cssText =
     'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);display:none;' +
-    'flex-direction:column;gap:4px;width:230px;max-height:72vh;overflow:auto;padding:8px;z-index:15;';
+    'flex-direction:column;gap:4px;width:230px;max-height:72vh;overflow:auto;padding:8px;z-index:900;';
   const menuBtn = mkIconBtn('menu', t('menu'), () => {
     menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
   });

@@ -10,6 +10,7 @@
  */
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
+import { makeDraggable, mkPanelHeader } from './ui.js';
 
 export interface GodSpec {
   labelKey: string;
@@ -40,18 +41,22 @@ export function buildGodPanel(
   const panel = document.createElement('div');
   panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;left:14px;top:236px;width:266px;max-height:calc(100vh - 320px);' +
-    'overflow:auto;display:none;padding:14px 15px;z-index:7;';
+    'position:fixed;left:14px;top:236px;width:266px;max-height:calc(100vh - 60px);' +
+    'display:none;flex-direction:column;overflow:hidden;padding:14px 15px;z-index:10;';
 
-  const title = document.createElement('div');
-  title.className = 'pg-eyebrow';
-  title.style.cssText = 'margin-bottom:12px;';
-  panel.append(title);
+  // Draggable header with title + close (×); the body below scrolls independently.
+  const { header: phead, title } = mkPanelHeader(() => (panel.style.display = 'none'));
+  panel.append(phead);
+  makeDraggable(panel, phead);
+
+  const scroll = document.createElement('div');
+  scroll.style.cssText = 'overflow:auto;flex:1;';
+  panel.append(scroll);
 
   // Slot for callers to inject extra controls (toggles, presets, dice) above the
   // sliders. Populated by gpuSim after construction.
   const extras = document.createElement('div');
-  panel.append(extras);
+  scroll.append(extras);
 
   const labels: { el: HTMLElement; key: string }[] = [];
   const inputs = new Map<number, { input: HTMLInputElement; valEl: HTMLElement; spec: GodSpec }>();
@@ -118,7 +123,7 @@ export function buildGodPanel(
       inputs.set(spec.idx, { input, valEl, spec });
     }
 
-    panel.append(header, body);
+    scroll.append(header, body);
   }
 
   const reset = document.createElement('button');
@@ -131,13 +136,13 @@ export function buildGodPanel(
       onChange(spec.idx, spec.value);
     }
   };
-  panel.append(reset);
+  scroll.append(reset);
 
   const toggle = document.createElement('button');
   toggle.className = 'pg-btn';
 
   toggle.onclick = () => {
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
   };
 
   function relabel(): void {

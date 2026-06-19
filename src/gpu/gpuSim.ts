@@ -1062,15 +1062,6 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   document.body.appendChild(godPanel.panel);
   ui.addTool(godPanel.toggle);
 
-  // God mode and the lineage panel share the left rail, so only one shows at a
-  // time — opening one closes the other (no overlapping panels).
-  godPanel.toggle.addEventListener('click', () => {
-    lineagePanel.panel.style.display = 'none';
-  });
-  lineagePanel.toggle.addEventListener('click', () => {
-    godPanel.panel.style.display = 'none';
-  });
-
   // --- Mechanism toggles + scenario presets + random-world dice -------------
   // All drive the same god sliders, so changes are captured by sharing and the
   // slider thumbs stay in sync. applyParams writes the uniform once per action.
@@ -1217,7 +1208,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // --- Help / pedagogical panel ---
   const help = document.createElement('div');
   help.style.cssText =
-    'position:fixed;inset:0;display:none;place-items:center;z-index:20;background:rgba(2,4,10,0.7);' +
+    'position:fixed;inset:0;display:none;place-items:center;z-index:1000;background:rgba(2,4,10,0.7);' +
     '-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);';
   const helpCard = document.createElement('div');
   helpCard.className = 'pg-panel';

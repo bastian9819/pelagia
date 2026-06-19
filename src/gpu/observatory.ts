@@ -191,7 +191,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
 
   const panel = document.createElement('div');
   panel.style.cssText =
-    'position:fixed;inset:0;display:none;z-index:30;overflow:auto;' +
+    'position:fixed;inset:0;display:none;z-index:1001;overflow:auto;' +
     'background:rgba(2,4,10,0.9);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;';
 
   const inner = document.createElement('div');
@@ -509,7 +509,7 @@ export function buildEvolutionHistory(): HistoryPanel {
 
   const panel = document.createElement('div');
   panel.style.cssText =
-    'position:fixed;inset:0;display:none;z-index:31;overflow:auto;' +
+    'position:fixed;inset:0;display:none;z-index:1002;overflow:auto;' +
     'background:rgba(2,4,10,0.92);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe8ff;';
   const inner = document.createElement('div');
   inner.style.cssText = 'max-width:1100px;margin:0 auto;padding:22px 22px 60px;';

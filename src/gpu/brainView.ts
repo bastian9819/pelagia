@@ -8,6 +8,7 @@
  */
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
+import { makeDraggable } from './ui.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
 
 export interface BrainView {
@@ -74,11 +75,12 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   const panel = document.createElement('div');
   panel.className = 'pg-panel';
   panel.style.cssText =
-    'position:fixed;top:14px;right:14px;width:348px;max-height:calc(100vh - 28px);overflow:auto;' +
-    'padding:13px 15px;display:none;font:12px var(--font-ui);z-index:8;';
+    'position:fixed;top:14px;right:14px;width:348px;max-height:calc(100vh - 28px);' +
+    'display:none;flex-direction:column;overflow:hidden;padding:13px 15px;font:12px var(--font-ui);z-index:10;';
 
   const header = document.createElement('div');
-  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+  header.style.cssText =
+    'display:flex;justify-content:space-between;align-items:center;gap:8px;flex:none;margin-bottom:6px;';
   const title = document.createElement('div');
   title.className = 'pg-eyebrow';
   const right = document.createElement('div');
@@ -142,7 +144,11 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   const eeg: number[][] = EEG_CHANNELS.map(() => []);
   let lastEegFrame = -1;
 
-  panel.append(header, canvas, policyLabel, policy, listens, stats, tapeLabel, tape);
+  const scroll = document.createElement('div');
+  scroll.style.cssText = 'overflow:auto;flex:1;';
+  scroll.append(canvas, policyLabel, policy, listens, stats, tapeLabel, tape);
+  panel.append(header, scroll);
+  makeDraggable(panel, header);
 
   // Selected creature's genome (static per creature) for the policy view.
   let genome: Float32Array | null = null;
@@ -375,7 +381,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       refreshPolicy();
     },
     show() {
-      panel.style.display = 'block';
+      panel.style.display = 'flex';
     },
     hide() {
       panel.style.display = 'none';
