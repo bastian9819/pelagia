@@ -3,6 +3,7 @@ import common from './shaders/life_common.wgsl?raw';
 import gridPasses from './shaders/life_grid.wgsl?raw';
 import simPass from './shaders/life_sim.wgsl?raw';
 import cyclePasses from './shaders/life_cycle.wgsl?raw';
+import seedPass from './shaders/life_seed.wgsl?raw';
 import creatureShader from './shaders/render_quad.wgsl?raw';
 import foodShader from './shaders/render_food.wgsl?raw';
 import fadeShader from './shaders/fade.wgsl?raw';
@@ -324,11 +325,13 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const gridModule = device.createShaderModule({ code: common + '\n' + gridPasses });
   const simModule = device.createShaderModule({ code: common + '\n' + simPass });
   const cycleModule = device.createShaderModule({ code: common + '\n' + cyclePasses });
+  const seedModule = device.createShaderModule({ code: common + '\n' + seedPass });
   const wgslErrors: string[] = [];
   for (const [name, mod] of [
     ['grid', gridModule],
     ['sim', simModule],
     ['cycle', cycleModule],
+    ['seed', seedModule],
   ] as const) {
     const info = await mod.getCompilationInfo();
     for (const m of info.messages) {
@@ -384,6 +387,55 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       { binding: 7, resource: { buffer: inspectBuf } },
       { binding: 8, resource: { buffer: gridDataBuf } },
     ],
+  });
+
+  // Seed brush pass: pops free slots and writes new creatures (correct free-list
+  // handling, unlike a CPU write-by-index). seedData carries centre/radius/lineage/
+  // hue/energy + the genome to clone (6 + GENOME_SIZE floats). The pass only touches
+  // state/bio/weights + gridData/freeList + seedData, so it uses TRIMMED bind-group
+  // layouts (not the full sim ones) to stay within the 8-storage-buffer limit
+  // (gotcha #1): reusing the sim's bgl0+bgl1 would bind 8 buffers, +seedData = 9.
+  const seedDataBuf = device.createBuffer({ size: (6 + GENOME_SIZE) * 4, usage: S | CD });
+  const bglSeed0 = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: u, buffer: { type: 'uniform' } }, // P
+      { binding: 1, visibility: u, buffer: sto }, // state
+      { binding: 2, visibility: u, buffer: sto }, // bio
+      { binding: 3, visibility: u, buffer: sto }, // weights
+    ],
+  });
+  const bglSeed1 = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: u, buffer: sto }, // gridData (binding numbers match life_common)
+      { binding: 3, visibility: u, buffer: sto }, // freeList
+    ],
+  });
+  const bglSeed2 = device.createBindGroupLayout({
+    entries: [{ binding: 0, visibility: u, buffer: ro }], // seedData
+  });
+  const pSeed = device.createComputePipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bglSeed0, bglSeed1, bglSeed2] }),
+    compute: { module: seedModule, entryPoint: 'seedCreatures' },
+  });
+  const seedGroup0 = device.createBindGroup({
+    layout: bglSeed0,
+    entries: [
+      { binding: 0, resource: { buffer: paramsBuf } },
+      { binding: 1, resource: { buffer: stateBuf } },
+      { binding: 2, resource: { buffer: bioBuf } },
+      { binding: 3, resource: { buffer: weightsBuf } },
+    ],
+  });
+  const seedGroup1 = device.createBindGroup({
+    layout: bglSeed1,
+    entries: [
+      { binding: 0, resource: { buffer: gridDataBuf } },
+      { binding: 3, resource: { buffer: freeListBuf } },
+    ],
+  });
+  const seedBind = device.createBindGroup({
+    layout: bglSeed2,
+    entries: [{ binding: 0, resource: { buffer: seedDataBuf } }],
   });
 
   const wgN = Math.ceil(n / 256);
@@ -618,12 +670,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // bio + genome directly (a god tool; seeded creatures may be ephemeral if the GPU
   // later reclaims a reactivated free slot — acceptable for a sandbox).
   let seedGenome: Float32Array | null = null;
-  const SEED_COUNT = 6;
-  const seedState = new Float32Array(SEED_COUNT * 4);
-  const seedBio = new Float32Array(SEED_COUNT * 4);
-  const seedWeights = new Float32Array(SEED_COUNT * GENOME_SIZE);
+  // seedData packs the seed pass's inputs: centre x/y, radius, lineage, hue, energy,
+  // then the genome to clone. The GPU pass pops free slots (correct accounting).
+  const seedData = new Float32Array(6 + GENOME_SIZE);
   const strokeGenome = new Float32Array(GENOME_SIZE);
-  let seedCursor = 0;
   let seedLineageCounter = 0;
   let strokeLineage = 0;
   let strokeHue = 0;
@@ -639,31 +689,23 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     strokeHue = floatFromU32(pcgHash(strokeLineage >>> 0));
   }
   function paintSeed(): void {
-    for (let k = 0; k < SEED_COUNT; k++) {
-      const a = Math.random() * Math.PI * 2;
-      const rr = Math.sqrt(Math.random()) * BRUSH.radius;
-      seedState[k * 4] = wrapWorld(brushWX + Math.cos(a) * rr);
-      seedState[k * 4 + 1] = wrapWorld(brushWY + Math.sin(a) * rr);
-      seedState[k * 4 + 2] = Math.random() * Math.PI * 2; // heading
-      seedState[k * 4 + 3] = 0; // speed
-      seedBio[k * 4] = pf[11]!; // initial energy
-      seedBio[k * 4 + 1] = strokeHue;
-      seedBio[k * 4 + 2] = 1; // alive
-      seedBio[k * 4 + 3] = strokeLineage;
-      seedWeights.set(strokeGenome, k * GENOME_SIZE);
-    }
-    const start = seedCursor % n;
-    const count = Math.min(SEED_COUNT, n - start);
-    device.queue.writeBuffer(stateBuf, start * 16, seedState, 0, count * 4);
-    device.queue.writeBuffer(bioBuf, start * 16, seedBio, 0, count * 4);
-    device.queue.writeBuffer(
-      weightsBuf,
-      start * GENOME_SIZE * 4,
-      seedWeights,
-      0,
-      count * GENOME_SIZE,
-    );
-    seedCursor = (seedCursor + count) % n;
+    seedData[0] = brushWX;
+    seedData[1] = brushWY;
+    seedData[2] = BRUSH.radius;
+    seedData[3] = strokeLineage;
+    seedData[4] = strokeHue;
+    seedData[5] = pf[11]!; // initial energy
+    seedData.set(strokeGenome, 6);
+    device.queue.writeBuffer(seedDataBuf, 0, seedData);
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    pass.setBindGroup(0, seedGroup0);
+    pass.setBindGroup(1, seedGroup1);
+    pass.setBindGroup(2, seedBind);
+    pass.setPipeline(pSeed);
+    pass.dispatchWorkgroups(1);
+    pass.end();
+    device.queue.submit([enc.finish()]);
   }
 
   let dragging = false;

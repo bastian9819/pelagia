@@ -25,7 +25,15 @@ fn death(@builtin(global_invocation_id) gid: vec3<u32>) {
       foodPos[i] = vec2<f32>(s.x, s.y);
     }
     let slot = atomicAdd(&gridData[freeCountIdx()], 1u);
-    freeList[slot] = i;
+    if (slot < P.d0.w) {
+      freeList[slot] = i;
+    } else {
+      // Free-list already holds n slots. With correct accounting this never
+      // happens; it's a guard so freeCount can NEVER exceed n (which would make
+      // the alive count n-freeCount negative and make repro read freeList out of
+      // bounds). Undo the increment; this dead slot just isn't relisted this tick.
+      atomicSub(&gridData[freeCountIdx()], 1u);
+    }
   }
 }
 
