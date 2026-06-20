@@ -1248,6 +1248,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       if (d.idx === 15) lo = d.min + span * 0.4; // keep some food
       if (d.idx === 8 || d.idx === 9 || d.idx === 31) hi = d.min + span * 0.45; // tame costs
       if (d.idx === 24) hi = d.min + span * 0.7; // predation not maxed
+      if (d.idx === 3) hi = d.min + span * 0.5; // speed not extreme
+      if (d.idx === 13) hi = d.min + span * 0.5; // mutation size moderate (genomes stay sane)
+      if (d.idx === 35) hi = d.min + span * 0.35; // gentle current (no chaotic streaks)
       const raw = lo + Math.random() * (hi - lo);
       const snapped = Math.round(raw / d.step) * d.step;
       return [d.idx, Math.min(d.max, Math.max(d.min, snapped))];
@@ -1877,6 +1880,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let frames = 0;
   let stepAcc = 0;
   let lastFpsT = performance.now();
+  // Adaptive cap on sim steps per frame: turbo (up to 16×) runs 16 full sim
+  // pipelines per frame, which can crater the frame rate on a heavy ocean. We do as
+  // many ticks as fit smoothly — feeding back from the real frame time — up to the
+  // requested speed, so the UI never freezes at single-digit fps.
+  let maxSteps = 16;
+  let lastFrameT = performance.now();
 
   // Restart the ocean in place: reseed the buffers from the current seed, empty
   // the free-slot stack, rewind the frame counter (so the shader RNG replays),
@@ -1935,9 +1944,21 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     // Simulation steps. Speed may be < 1 (slow motion): accumulate fractional
     // steps so e.g. 0.5x runs one tick every other frame. Each step is its own
     // submit so the frame counter (used for RNG keying) varies per tick.
+    // Adapt the step cap from the real frame time so turbo never tanks the fps:
+    // back off when frames get slow, grow back when there's headroom.
+    const tNow = performance.now();
+    const frameDt = tNow - lastFrameT;
+    lastFrameT = tNow;
+    if (!ui.paused && frameDt > 0 && frameDt < 250) {
+      if (frameDt > 28) maxSteps = Math.max(1, maxSteps * 0.85);
+      else if (frameDt < 18) maxSteps = Math.min(32, maxSteps * 1.08);
+    }
+
     let steps = 0;
     if (!ui.paused) {
-      stepAcc += ui.speed;
+      // Slow motion (speed < 1) is exact; turbo (> 1) is capped to what stays smooth.
+      const target = ui.speed <= 1 ? ui.speed : Math.min(ui.speed, maxSteps);
+      stepAcc += target;
       steps = Math.floor(stepAcc);
       stepAcc -= steps;
     }
