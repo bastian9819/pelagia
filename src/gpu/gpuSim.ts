@@ -633,7 +633,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // ocean attracts/repels/feeds/smites creatures instead of panning. tool 0 = none
   // (normal pan + select). The force tools drive ext5/ext6 in the sim shader; the
   // food tool scatters pellets into a rolling block of slots around the cursor. ---
-  const BRUSH = { tool: 0, radius: 130, strength: 2.5 };
+  const BRUSH = { tool: 0, radius: 130, strength: 6 };
   // none, attract, repel, food(CPU), cataclysm, seed(CPU), mutagen, heal.
   // CPU tools (food, seed) = shader mode 0.
   const SHADER_MODE = [0, 1, 2, 0, 4, 0, 6, 7];
@@ -713,6 +713,30 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let dragMoved = false;
   let lastX = 0;
   let lastY = 0;
+
+  // Brush area-of-effect ring: a circle under the cursor showing exactly where (and
+  // how big) the active brush acts. Without it, attract/repel/mutate looked like
+  // they did nothing — you couldn't see the zone they affect, especially zoomed out.
+  const brushRing = document.createElement('div');
+  brushRing.style.cssText =
+    'position:fixed;display:none;border:1.5px dashed rgba(63,240,216,0.8);border-radius:50%;' +
+    'pointer-events:none;transform:translate(-50%,-50%);z-index:5;mix-blend-mode:screen;';
+  document.body.appendChild(brushRing);
+  function updateBrushRing(clientX: number, clientY: number): void {
+    if (BRUSH.tool === 0) {
+      brushRing.style.display = 'none';
+      return;
+    }
+    const dpr = canvas.width / window.innerWidth;
+    const d = (2 * BRUSH.radius * ppwNow()) / dpr; // world radius -> on-screen diameter
+    brushRing.style.left = `${clientX}px`;
+    brushRing.style.top = `${clientY}px`;
+    brushRing.style.width = `${d}px`;
+    brushRing.style.height = `${d}px`;
+    brushRing.style.display = 'block';
+  }
+
+  canvas.addEventListener('pointerleave', () => (brushRing.style.display = 'none'));
   canvas.addEventListener('pointerdown', (e) => {
     try {
       canvas.setPointerCapture(e.pointerId);
@@ -724,6 +748,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       const { wx, wy } = screenToWorld(e.clientX, e.clientY);
       brushWX = wx;
       brushWY = wy;
+      updateBrushRing(e.clientX, e.clientY);
       writeBrushParams();
       if (BRUSH.tool === 3) paintFood();
       else if (BRUSH.tool === 5) {
@@ -738,6 +763,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     lastY = e.clientY;
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (BRUSH.tool !== 0) updateBrushRing(e.clientX, e.clientY); // preview the area
     if (painting) {
       const { wx, wy } = screenToWorld(e.clientX, e.clientY);
       brushWX = wx;
@@ -794,9 +820,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   function setTool(tool: number): void {
     BRUSH.tool = tool;
     canvas.style.cursor = tool === 0 ? '' : 'crosshair';
-    if (tool === 0 && painting) {
-      painting = false;
-      writeBrushParams();
+    if (tool === 0) {
+      brushRing.style.display = 'none';
+      if (painting) {
+        painting = false;
+        writeBrushParams();
+      }
     }
     for (const { b, def } of brushBtns) b.classList.toggle('is-active', def.tool === tool);
   }
@@ -820,6 +849,12 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   sizeInput.addEventListener('input', () => {
     BRUSH.radius = Number(sizeInput.value);
     if (painting) writeBrushParams();
+    if (brushRing.style.display !== 'none') {
+      const dpr = canvas.width / window.innerWidth;
+      const d = (2 * BRUSH.radius * ppwNow()) / dpr;
+      brushRing.style.width = `${d}px`;
+      brushRing.style.height = `${d}px`;
+    }
   });
   brushBar.append(sizeInput);
   document.body.appendChild(brushBar);
