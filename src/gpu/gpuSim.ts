@@ -25,6 +25,7 @@ import { SpatialGrid } from '../sim/grid.js';
 import { wrapDelta } from '../core/space.js';
 import { buildUi, mkBtn, mkIconBtn, setBtnIcon } from './ui.js';
 import { icon, type IconName } from './icons.js';
+import { attachTooltip } from './tooltip.js';
 import { buildBrainView } from './brainView.js';
 import {
   buildLineagePanel,
@@ -831,6 +832,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   for (const def of brushTools) {
     const b = mkIconBtn(def.icon, t(def.key), () => setTool(def.tool));
+    attachTooltip(b, def.key);
     brushBtns.push({ b, def });
     brushBar.append(b);
   }
@@ -844,7 +846,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   sizeInput.max = '300';
   sizeInput.step = '10';
   sizeInput.value = String(BRUSH.radius);
-  sizeInput.title = t('tool_size');
+  attachTooltip(sizeInput, 'tool_size');
   sizeInput.style.cssText = 'width:70px;margin:0 4px;';
   sizeInput.addEventListener('input', () => {
     BRUSH.radius = Number(sizeInput.value);
@@ -860,8 +862,10 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   document.body.appendChild(brushBar);
   setTool(0);
   onLang(() => {
-    for (const { b, def } of brushBtns) b.title = t(def.key);
-    sizeInput.title = t('tool_size');
+    // Custom tooltips resolve language at show-time; keep aria-labels in sync for a11y
+    // without re-adding native `title` tooltips (which would double up).
+    for (const { b, def } of brushBtns) b.setAttribute('aria-label', t(def.key));
+    sizeInput.setAttribute('aria-label', t('tool_size'));
   });
 
   // Photo mode: press H to hide every overlay (all body children but the canvas)

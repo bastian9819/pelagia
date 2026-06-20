@@ -4,6 +4,7 @@
  */
 import { t, onLang, toggleLang, getLang } from './i18n.js';
 import { icon, type IconName } from './icons.js';
+import { attachTooltip } from './tooltip.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16];
 const DEFAULT_SPEED_IDX = 3; // 1x
@@ -159,6 +160,9 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
   hint.style.cssText =
     'color:var(--ink-faint);font-size:11px;margin-top:11px;line-height:1.55;white-space:pre-line;';
   panel.append(title, aliveEl, aliveLabel, spark, fpsEl, hint);
+  attachTooltip(aliveEl, 'alive');
+  attachTooltip(aliveLabel, 'alive');
+  attachTooltip(fpsEl, 'tick');
   const sctx = spark.getContext('2d')!;
 
   const controls = document.createElement('div');
@@ -216,6 +220,12 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
     return s;
   };
   controls.append(pauseBtn, stepBtn, sep(), speedBtn, sep(), fitBtn, colorBtn, sep(), menuBtn);
+  attachTooltip(pauseBtn, 'pause');
+  attachTooltip(stepBtn, 'step');
+  attachTooltip(speedBtn, 'speed');
+  attachTooltip(fitBtn, 'fit');
+  attachTooltip(colorBtn, 'color');
+  attachTooltip(menuBtn, 'menu');
 
   const langBtn = mkBtn(getLang().toUpperCase(), () => toggleLang());
   function addTool(btn: HTMLButtonElement): void {
@@ -236,10 +246,11 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
     hint.textContent = t('hint');
     langBtn.textContent = getLang().toUpperCase();
     setBtnIcon(colorBtn, 'palette', color.label());
-    pauseBtn.title = t('pause');
-    stepBtn.title = t('step');
-    fitBtn.title = t('fit');
-    menuBtn.title = t('menu');
+    // Custom tooltips handle hover text; keep aria-labels for a11y (no native title).
+    pauseBtn.setAttribute('aria-label', t('pause'));
+    stepBtn.setAttribute('aria-label', t('step'));
+    fitBtn.setAttribute('aria-label', t('fit'));
+    menuBtn.setAttribute('aria-label', t('menu'));
   }
   relabel();
   onLang(relabel);
