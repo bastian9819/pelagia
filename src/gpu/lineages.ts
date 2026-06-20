@@ -17,6 +17,7 @@ import {
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
 import { makeDraggable, mkPanelHeader } from './ui.js';
+import { attachTooltip } from './tooltip.js';
 
 const inp = new Float32Array(INPUT_SIZE);
 const hid = new Float32Array(HIDDEN_SIZE);
@@ -160,6 +161,7 @@ export function buildLineagePanel(): LineagePanel {
   const { header: phead, title } = mkPanelHeader(() => (panel.style.display = 'none'));
   panel.append(phead);
   makeDraggable(panel, phead);
+  attachTooltip(title, 'panel_lineage');
   const list = document.createElement('div');
   list.style.cssText = 'font:12px var(--font-ui);overflow:auto;flex:1;';
   panel.append(list);
@@ -171,22 +173,53 @@ export function buildLineagePanel(): LineagePanel {
   };
 
   let lastRows: LineageRow[] = [];
+  // A diverging bar for a trait in [-1, 1]: centre origin, cyan to the right
+  // (steers toward), magenta to the left (avoids) — same colours as the brain view.
+  function divBar(value: number): string {
+    const v = Math.max(-1, Math.min(1, value));
+    const w = Math.abs(v) * 50;
+    const left = v >= 0 ? 50 : 50 - w;
+    const col = v >= 0 ? 'var(--glow-cyan)' : '#ff5aa6';
+    return (
+      `<span style="position:relative;display:block;width:100%;height:5px;border-radius:3px;background:rgba(255,255,255,0.08)">` +
+      `<span style="position:absolute;left:50%;top:-1px;width:1px;height:7px;background:rgba(255,255,255,0.22)"></span>` +
+      `<span style="position:absolute;left:${left}%;width:${w}%;height:5px;border-radius:3px;background:${col}"></span>` +
+      `</span>`
+    );
+  }
+  // A 0..max fill bar (for neuron count).
+  function fillBar(value: number, max: number, col: string): string {
+    const w = Math.max(0, Math.min(1, value / max)) * 100;
+    return (
+      `<span style="display:block;width:100%;height:5px;border-radius:3px;background:rgba(255,255,255,0.08)">` +
+      `<span style="display:block;width:${w}%;height:5px;border-radius:3px;background:${col}"></span></span>`
+    );
+  }
+  function traitRow(labelKey: string, valueText: string, bar: string): string {
+    return (
+      `<div style="display:flex;align-items:center;gap:8px;margin-top:4px">` +
+      `<span style="width:62px;flex:none;color:var(--ink-faint);font-size:11px">${t(labelKey)}</span>` +
+      `<span style="flex:1">${bar}</span>` +
+      `<span style="width:34px;flex:none;text-align:right;color:var(--ink-dim);font:11px var(--font-mono)">${valueText}</span>` +
+      `</div>`
+    );
+  }
   function rowHtml(r: LineageRow): string {
     const c = `hsl(${Math.round(r.hue * 360)}, 90%, 62%)`;
     const arrow = r.trend > 1 ? '▲' : r.trend < -1 ? '▼' : '—';
     const ac = r.trend > 1 ? '#3ff0d8' : r.trend < -1 ? '#ff5aa6' : 'rgba(207,232,255,.5)';
     const desc = `${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}`;
     const traits =
-      `${t('tr_seek')} ${r.seek.toFixed(2)} · ` +
-      `${t('tr_big')} ${r.bigSeek.toFixed(2)} · ` +
-      `${t('tr_aggr')} ${r.aggression.toFixed(2)} · ` +
-      `${r.neurons} ${t('tr_neurons')}`;
+      traitRow('tr_seek', r.seek.toFixed(2), divBar(r.seek)) +
+      traitRow('tr_big', r.bigSeek.toFixed(2), divBar(r.bigSeek)) +
+      traitRow('tr_aggr', r.aggression.toFixed(2), divBar(r.aggression)) +
+      traitRow('tr_neurons', `${r.neurons}/10`, fillBar(r.neurons, 10, '#9b8cff'));
     return (
-      `<div style="margin-bottom:9px;line-height:1.45">` +
+      `<div style="margin-bottom:11px;line-height:1.45">` +
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
       `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span>` +
-      `<div style="opacity:.7;margin-left:16px">${desc}</div>` +
-      `<div style="opacity:.5;margin-left:16px;font-size:11px">${traits}</div></div>`
+      `<div style="opacity:.7;margin-left:16px;margin-top:2px">${desc}</div>` +
+      `<div style="margin-left:16px;margin-top:3px">${traits}</div></div>`
     );
   }
   function sectionHtml(key: string, rows: LineageRow[]): string {

@@ -194,6 +194,19 @@ const TIPS: Record<string, TipEntry> = {
     en: { title: 'Brush size', body: 'How wide every brush reaches.' },
     es: { title: 'Tamaño del pincel', body: 'Hasta dónde llega cada pincel.' },
   },
+  // --- Panels ---
+  panel_lineage: {
+    en: {
+      title: 'Lineages',
+      body: 'Families of creatures sharing a colour. "Dominant" = the most numerous; "distinct" = the most unusual in behaviour. The bars show each family\'s evolved brain traits.',
+      tech: 'seek / big-food / aggression: −1 (avoids) … +1 (steers strongly toward); neurons = active of 10. Cyan = positive, magenta = negative.',
+    },
+    es: {
+      title: 'Linajes',
+      body: 'Familias de criaturas que comparten color. "Dominantes" = las más numerosas; "distintas" = las de comportamiento más singular. Las barras muestran los rasgos del cerebro evolucionado de cada familia.',
+      tech: 'busca / comida grande / agresión: −1 (evita) … +1 (se dirige con fuerza); neuronas = activas de 10. Turquesa = positivo, magenta = negativo.',
+    },
+  },
 };
 
 let tipEl: HTMLDivElement | null = null;
