@@ -904,6 +904,53 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   ];
   let colorMode = 0;
 
+  // Colour legend: a small top-centre strip that explains what the CURRENT colour
+  // mode means — every "filter" gets a legend — updated as you cycle colours.
+  type Leg = { type: 'lineage' | 'ramp' | 'toxin'; loKey?: string; hiKey?: string };
+  const LEGENDS: Record<string, Leg> = {
+    lineageWord: { type: 'lineage' },
+    sizeWord: { type: 'ramp', loKey: 'leg_low', hiKey: 'leg_high' },
+    neurons: { type: 'ramp', loKey: 'leg_low', hiKey: 'leg_high' },
+    energyWord: { type: 'ramp', loKey: 'leg_low', hiKey: 'leg_high' },
+    speedWord: { type: 'ramp', loKey: 'leg_low', hiKey: 'leg_high' },
+    elongWord: { type: 'ramp', loKey: 'shapeBlob', hiKey: 'shapeEel' },
+    glowWord: { type: 'ramp', loKey: 'leg_low', hiKey: 'leg_high' },
+    thermalWord: { type: 'ramp', loKey: 'tempCold', hiKey: 'tempWarm' },
+    toxinWord: { type: 'toxin' },
+  };
+  // Matches the render's blue(low)→red(high) hue ramp.
+  const RAMP_CSS =
+    'linear-gradient(90deg,hsl(238,68%,56%),hsl(186,70%,50%),hsl(120,60%,48%),hsl(54,85%,55%),hsl(0,72%,56%))';
+  const colorLegend = document.createElement('div');
+  colorLegend.className = 'pg-panel';
+  colorLegend.style.cssText =
+    'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:6;padding:7px 13px;' +
+    'display:flex;align-items:center;gap:9px;font:12px var(--font-ui);white-space:nowrap;';
+  const swatch = (css: string): string =>
+    `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${css};vertical-align:-2px"></span>`;
+  function updateColorLegend(): void {
+    const mode = COLOR_MODES[colorMode]!;
+    const leg = LEGENDS[mode]!;
+    const title = `<span style="color:var(--glow-cyan);font-weight:600">${t(mode)}</span>`;
+    const dim = (s: string): string => `<span style="color:var(--ink-dim)">${s}</span>`;
+    let body: string;
+    if (leg.type === 'lineage') {
+      const sw = [0.05, 0.33, 0.58, 0.82].map((h) => swatch(`hsl(${h * 360},80%,62%)`)).join('');
+      body = `${sw}&nbsp; ${dim(t('leg_lineage'))}`;
+    } else if (leg.type === 'toxin') {
+      body = `${swatch('#8a9099')} ${dim(t('leg_safe'))} &nbsp; ${swatch('#b6e23a')} ${dim(t('leg_toxic'))}`;
+    } else {
+      body =
+        `<span style="color:var(--ink-faint);font-size:11px">${t(leg.loKey!)}</span>` +
+        `<span style="display:inline-block;width:128px;height:9px;border-radius:5px;background:${RAMP_CSS};margin:0 9px"></span>` +
+        `<span style="color:var(--ink-faint);font-size:11px">${t(leg.hiKey!)}</span>`;
+    }
+    colorLegend.innerHTML = `${title}&nbsp; ${body}`;
+  }
+  updateColorLegend();
+  onLang(updateColorLegend);
+  document.body.appendChild(colorLegend);
+
   // --- Stats panel + controls ---
   const ui = buildUi(
     () => {
@@ -925,6 +972,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         colorMode = (colorMode + 1) % COLOR_MODES.length;
         renderData[6] = colorMode;
         device.queue.writeBuffer(renderUbo, 0, renderData);
+        updateColorLegend();
       },
       label: () => t(COLOR_MODES[colorMode]!),
     },
