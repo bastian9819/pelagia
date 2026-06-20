@@ -222,7 +222,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let nx = wrapf(s.x + cos(heading) * speed * P.p1.y + cur.x + brushDX, W);
   let ny = wrapf(s.y + sin(heading) * speed * P.p1.y + cur.y + brushDY, H);
-  state[i] = vec4<f32>(nx, ny, heading, speed);
+  // Sanitise: never let a NaN/Inf creep into stored state (it would make the
+  // creature immortal — NaN never compares <= 0 — and invisible, a "zombie").
+  state[i] = vec4<f32>(
+    finiteOr(nx, s.x),
+    finiteOr(ny, s.y),
+    finiteOr(heading, s.z),
+    finiteOr(speed, 0.0),
+  );
 
   var energy = b.x;
   let eatR = P.p1.z;
@@ -286,7 +293,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   energy = energy - (P.p2.x * size + P.p2.y * speed + P.ext2.w * abs(out[0]) + glowCost + attackCost + thermalCost + toxinCost);
   energy = energy + heal * 4.0; // heal brush: feed energy to creatures under it
   if (zap) { energy = -1.0; } // cataclysm brush: instant death
-  b.x = energy;
+  // A non-finite energy (NaN/Inf) would make the creature immortal in the death
+  // pass; clamp it to 0 so such a creature dies instead of becoming a zombie.
+  b.x = finiteOr(energy, 0.0);
   // bio.w is the stable lineage id (set at birth, inherited) — never modified here.
   bio[i] = b;
 
@@ -301,7 +310,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let gbase = i * GENOME_SIZE;
     for (var m = 0u; m < 4u; m = m + 1u) {
       let gi = (P.d1.y + i * 7u + m * 53u) % GENOME_SIZE;
-      weights[gbase + gi] = weights[gbase + gi] + gaussian(i * 911u + m, P.d1.y) * 0.4 * mutFall;
+      weights[gbase + gi] = finiteOr(
+        weights[gbase + gi] + gaussian(i * 911u + m, P.d1.y) * 0.4 * mutFall,
+        0.0,
+      );
     }
   }
 }

@@ -12,7 +12,10 @@ fn death(@builtin(global_invocation_id) gid: vec3<u32>) {
   var b = bio[i];
   if (b.z < 0.5) { return; } // already free
   let eaten = atomicLoad(&gridData[eatenIdx(i)]) != 0u;
-  if (b.x <= 0.0 || eaten) {
+  // Dead if out of energy OR eaten OR its energy is non-finite (NaN/Inf would
+  // otherwise never compare <= 0, making the creature an immortal "zombie").
+  let starved = !(b.x > 0.0 && b.x < 3.0e38);
+  if (starved || eaten) {
     b.z = 0.0;
     b.x = 0.0;
     bio[i] = b;
@@ -153,7 +156,9 @@ fn repro(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (rnd(i * 131u + k, frame) < rate) {
       w = w + gaussian(i * 977u + k, frame) * mutStd;
     }
-    weights[dst + k] = w;
+    // Sanitise: a NaN/Inf gene would spread through the gene pool (NaN + anything =
+    // NaN) and break every descendant's brain. Heal it to 0 at birth.
+    weights[dst + k] = finiteOr(w, 0.0);
   }
 }
 

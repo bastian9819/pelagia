@@ -147,6 +147,12 @@ fn gaussian(a: u32, b: u32) -> f32 {
 fn wrapf(x: f32, s: f32) -> f32 {
   return x - floor(x / s) * s;
 }
+// Return x if it is finite, else `fallback`. Guards against NaN/Inf creeping into
+// energy, position or genes (a NaN never compares > 0, so it would otherwise make a
+// creature immortal, and it spreads to offspring through reproduction).
+fn finiteOr(x: f32, fallback: f32) -> f32 {
+  return select(fallback, x, x > -3.0e38 && x < 3.0e38);
+}
 fn wrapHue(h: f32) -> f32 {
   return h - floor(h);
 }
