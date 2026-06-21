@@ -2,6 +2,8 @@
 
 **An ocean of artificial life that runs 100% in your browser.**
 
+### ▶ Live demo: **[pelagia.phaino.dev](https://pelagia.phaino.dev)**
+
 Thousands of creatures, each with a _real_ neural network (not scripted), perceive
 their world, eat, reproduce and mutate — and **evolve by natural selection before
 your eyes**. In minutes, predators, fleeing schools and collective behaviours
@@ -9,6 +11,12 @@ emerge on their own, with nobody programming them. Click any creature to watch i
 neural brain firing in real time, and share your exact ocean with a URL.
 
 > _ALIEN for everyone, in a browser tab._
+
+<p align="center">
+  <a href="https://pelagia.phaino.dev">
+    <img src="./public/og.svg" alt="PELAGIA — an ocean of artificial life" width="680" />
+  </a>
+</p>
 
 ---
 
