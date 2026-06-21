@@ -243,6 +243,254 @@ const TIPS: Record<string, TipEntry> = {
       tech: 'busca / comida grande / agresión: −1 (evita) … +1 (se dirige con fuerza); neuronas = activas de 10. Turquesa = positivo, magenta = negativo.',
     },
   },
+  // --- God-mode parameters ---
+  g_speed: {
+    en: { title: 'Max speed', body: 'How fast creatures can swim at full thrust.' },
+    es: { title: 'Velocidad máx.', body: 'Lo rápido que pueden nadar a empuje máximo.' },
+  },
+  g_agility: {
+    en: { title: 'Agility', body: 'How sharply a creature can turn each tick.' },
+    es: { title: 'Agilidad', body: 'Cuánto puede girar una criatura en cada tick.' },
+  },
+  g_eatRange: {
+    en: { title: 'Eat range', body: 'How close a creature must be to eat a food pellet.' },
+    es: { title: 'Rango de comer', body: 'Cuánto debe acercarse una criatura para comer.' },
+  },
+  g_current: {
+    en: {
+      title: 'Current',
+      body: 'Strength of the ocean current that drags every creature and food along.',
+      tech: 'High values sweep creatures into fast streaks',
+    },
+    es: {
+      title: 'Corriente',
+      body: 'Fuerza de la corriente oceánica que arrastra a criaturas y comida.',
+      tech: 'Valores altos las arrastran en estelas rápidas',
+    },
+  },
+  g_phero: {
+    en: {
+      title: 'Pheromones',
+      body: 'How much trail each creature leaves behind. Brains can sense and follow trails.',
+      tech: 'The "show trails" view reveals the field',
+    },
+    es: {
+      title: 'Feromonas',
+      body: 'Cuánto rastro deja cada criatura. El cerebro puede percibir y seguir rastros.',
+      tech: 'El modo "mostrar rastros" revela el campo',
+    },
+  },
+  g_food: {
+    en: {
+      title: 'Food spawn',
+      body: 'How much food appears per tick — the main lever on how many creatures the ocean can feed.',
+    },
+    es: {
+      title: 'Aparición de comida',
+      body: 'Cuánta comida aparece por tick — la palanca principal de cuántas criaturas puede alimentar el océano.',
+    },
+  },
+  g_foodEnergy: {
+    en: { title: 'Food energy', body: 'How much energy a creature gains from eating one pellet.' },
+    es: { title: 'Energía de comida', body: 'Cuánta energía gana una criatura al comer un trozo.' },
+  },
+  g_patchiness: {
+    en: {
+      title: 'Food patchiness',
+      body: 'How clumped food is: spread out (low) or in tight blooms (high).',
+    },
+    es: {
+      title: 'Agrupación de comida',
+      body: 'Cómo se reparte la comida: dispersa (bajo) o en floraciones densas (alto).',
+    },
+  },
+  g_bigFood: {
+    en: {
+      title: 'Big-food value',
+      body: 'How much more energy a rare golden big-food pellet gives vs plankton.',
+    },
+    es: {
+      title: 'Valor comida grande',
+      body: 'Cuánta más energía da la rara comida grande dorada frente al plancton.',
+    },
+  },
+  g_bigFoodAmt: {
+    en: {
+      title: 'Big-food amount',
+      body: 'What fraction of food is the rare big kind (0 = none).',
+    },
+    es: {
+      title: 'Cantidad comida grande',
+      body: 'Qué fracción de la comida es del tipo grande raro (0 = nada).',
+    },
+  },
+  g_carrion: {
+    en: {
+      title: 'Carrion',
+      body: 'Chance a dead creature leaves food where it fell, feeding scavengers.',
+    },
+    es: {
+      title: 'Carroña',
+      body: 'Probabilidad de que una criatura muerta deje comida donde cae, alimentando carroñeros.',
+    },
+  },
+  g_mutRate: {
+    en: {
+      title: 'Mutation rate',
+      body: 'How often each gene changes when a creature is born. More = faster but messier evolution.',
+    },
+    es: {
+      title: 'Tasa de mutación',
+      body: 'Con qué frecuencia cambia cada gen al nacer. Más = evolución más rápida pero más caótica.',
+    },
+  },
+  g_mutSize: {
+    en: { title: 'Mutation size', body: 'How big each mutation is when it happens.' },
+    es: { title: 'Tamaño de mutación', body: 'Cómo de grande es cada mutación cuando ocurre.' },
+  },
+  g_reproAt: {
+    en: {
+      title: 'Reproduce at',
+      body: 'How much energy a creature must store before it can have offspring.',
+    },
+    es: {
+      title: 'Se reproduce a',
+      body: 'Cuánta energía debe acumular una criatura para tener cría.',
+    },
+  },
+  g_offspring: {
+    en: { title: 'Offspring energy', body: "How much of a parent's energy goes to each newborn." },
+    es: { title: 'Energía de la cría', body: 'Cuánta energía del progenitor recibe cada cría.' },
+  },
+  g_offspringSpread: {
+    en: { title: 'Offspring spread', body: 'How far from the parent a newborn appears.' },
+    es: { title: 'Dispersión de cría', body: 'A qué distancia del progenitor aparece la cría.' },
+  },
+  g_speciation: {
+    en: {
+      title: 'Speciation rate',
+      body: 'Chance a newborn founds a brand-new lineage (new colour) — makes the family tree branch.',
+    },
+    es: {
+      title: 'Tasa de especiación',
+      body: 'Probabilidad de que una cría funde un linaje nuevo (color nuevo) — ramifica el árbol genealógico.',
+    },
+  },
+  g_sexual: {
+    en: {
+      title: 'Sexual repro',
+      body: "Chance a birth mixes two parents' genes instead of cloning one.",
+    },
+    es: {
+      title: 'Reproducción sexual',
+      body: 'Probabilidad de que un nacimiento mezcle genes de dos progenitores en vez de clonar uno.',
+    },
+  },
+  g_mate: {
+    en: {
+      title: 'Mate choice',
+      body: 'How strongly creatures prefer brighter partners when mating — turns glow into a sexually-selected ornament.',
+    },
+    es: {
+      title: 'Elección de pareja',
+      body: 'Cuánto prefieren parejas más brillantes al aparearse — convierte el brillo en un ornamento de selección sexual.',
+    },
+  },
+  g_metabolism: {
+    en: { title: 'Metabolism', body: 'Energy a creature burns each tick just to stay alive.' },
+    es: {
+      title: 'Metabolismo',
+      body: 'Energía que gasta una criatura cada tick solo por seguir viva.',
+    },
+  },
+  g_moveCost: {
+    en: {
+      title: 'Move cost',
+      body: 'Extra energy spent proportional to how fast a creature swims.',
+    },
+    es: {
+      title: 'Coste de moverse',
+      body: 'Energía extra gastada en proporción a lo rápido que nada.',
+    },
+  },
+  g_turnCost: {
+    en: { title: 'Turn cost', body: "Energy spent on turning, so agile steering isn't free." },
+    es: {
+      title: 'Coste de giro',
+      body: 'Energía gastada al girar, para que maniobrar no sea gratis.',
+    },
+  },
+  g_glowCost: {
+    en: { title: 'Glow cost', body: 'Energy cost of bioluminescence (0 = glowing is free).' },
+    es: {
+      title: 'Coste de brillo',
+      body: 'Coste energético de la bioluminiscencia (0 = brillar es gratis).',
+    },
+  },
+  g_thermal: {
+    en: {
+      title: 'Thermal contrast',
+      body: 'How much living in the wrong temperature band costs energy, pushing lineages to adapt to regions.',
+    },
+    es: {
+      title: 'Contraste térmico',
+      body: 'Cuánta energía cuesta vivir en la banda de temperatura equivocada, empujando a los linajes a adaptarse por zonas.',
+    },
+  },
+  g_predation: {
+    en: {
+      title: 'Predation',
+      body: 'How much energy a predator gains from eating prey (0 = no predation at all).',
+    },
+    es: {
+      title: 'Depredación',
+      body: 'Cuánta energía gana un depredador al comerse una presa (0 = sin depredación).',
+    },
+  },
+  g_predMargin: {
+    en: {
+      title: 'Predation margin',
+      body: 'How much bigger a hunter must be than its prey to eat it.',
+    },
+    es: {
+      title: 'Margen de depredación',
+      body: 'Cuánto más grande debe ser un cazador que su presa para comerla.',
+    },
+  },
+  g_attackCost: {
+    en: {
+      title: 'Attack cost',
+      body: 'Energy spent each tick a creature has its attack on, so lunging has a price.',
+    },
+    es: {
+      title: 'Coste de ataque',
+      body: 'Energía gastada cada tick con el ataque activo, para que embestir tenga precio.',
+    },
+  },
+  g_toxin: {
+    en: {
+      title: 'Toxicity',
+      body: 'How much energy a predator loses for eating a toxic prey — makes toxicity a real defence.',
+    },
+    es: {
+      title: 'Toxicidad',
+      body: 'Cuánta energía pierde un depredador al comerse una presa tóxica — hace de la toxicidad una defensa real.',
+    },
+  },
+  g_dayNight: {
+    en: {
+      title: 'Day / night',
+      body: 'Strength of the day/night cycle: food swings between boom and bust, and the ocean brightens and dims.',
+    },
+    es: {
+      title: 'Día / noche',
+      body: 'Fuerza del ciclo día/noche: la comida oscila entre auge y escasez, y el océano se ilumina y se oscurece.',
+    },
+  },
+  g_dayLength: {
+    en: { title: 'Day length', body: 'How long one day/night cycle lasts, in ticks.' },
+    es: { title: 'Duración del día', body: 'Cuánto dura un ciclo día/noche, en ticks.' },
+  },
 };
 
 let tipEl: HTMLDivElement | null = null;

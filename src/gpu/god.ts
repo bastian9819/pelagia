@@ -11,6 +11,7 @@
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
 import { makeDraggable, mkPanelHeader } from './ui.js';
+import { attachTooltip } from './tooltip.js';
 
 export interface GodSpec {
   labelKey: string;
@@ -119,6 +120,7 @@ export function buildGodPanel(
       });
       row.append(head, input);
       body.append(row);
+      attachTooltip(head, spec.labelKey); // explains the parameter on hover (if a tip exists)
       labels.push({ el: label, key: spec.labelKey });
       inputs.set(spec.idx, { input, valEl, spec });
     }
