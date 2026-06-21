@@ -195,6 +195,42 @@ const TIPS: Record<string, TipEntry> = {
     es: { title: 'Tamaño del pincel', body: 'Hasta dónde llega cada pincel.' },
   },
   // --- Panels ---
+  panel_brain: {
+    en: {
+      title: 'Creature brain',
+      body: "This creature's real neural network firing live. Left column = its senses, middle = hidden neurons, right = its decisions (turn, thrust, attack). Nobody scripted it — the weights are in its genome.",
+      tech: 'Node colour = activation: cyan positive, magenta negative; brightness = strength.',
+    },
+    es: {
+      title: 'Cerebro de la criatura',
+      body: 'La red neuronal real de esta criatura disparándose en vivo. Columna izquierda = sus sentidos, centro = neuronas ocultas, derecha = sus decisiones (giro, empuje, ataque). Nadie la programó — los pesos están en su genoma.',
+      tech: 'Color del nodo = activación: cian positiva, magenta negativa; brillo = intensidad.',
+    },
+  },
+  brain_policy: {
+    en: {
+      title: 'Steering policy',
+      body: 'How this brain turns depending on where it senses plankton, big food or a neighbour — read off its genome, not its current state.',
+      tech: 'X axis = relative bearing (−180°…180°); Y axis = chosen turn.',
+    },
+    es: {
+      title: 'Política de giro',
+      body: 'Cómo gira este cerebro según dónde percibe plancton, comida grande o un vecino — leído de su genoma, no de su estado actual.',
+      tech: 'Eje X = rumbo relativo (−180°…180°); eje Y = giro decidido.',
+    },
+  },
+  brain_eeg: {
+    en: {
+      title: 'Decision tape',
+      body: 'What this creature senses and decides, scrolling over time — one sample per tick, so it freezes when paused and advances with the step button.',
+      tech: 'Top lanes = senses, bottom lanes = decisions (turn, thrust, attack).',
+    },
+    es: {
+      title: 'Tira de decisiones',
+      body: 'Lo que esta criatura siente y decide, desplazándose en el tiempo — una muestra por tick, así que se congela en pausa y avanza con el botón de paso.',
+      tech: 'Carriles de arriba = sentidos, de abajo = decisiones (giro, empuje, ataque).',
+    },
+  },
   panel_lineage: {
     en: {
       title: 'Lineages',

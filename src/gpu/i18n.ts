@@ -113,6 +113,12 @@ const S: Dict = {
     en: 'decision tape (senses → decisions)',
     es: 'tira de decisiones (sentidos → decisiones)',
   },
+  bv_legend_cols: {
+    en: 'senses → neurons → decisions',
+    es: 'sentidos → neuronas → decisiones',
+  },
+  bv_pos: { en: 'positive', es: 'positiva' },
+  bv_neg: { en: 'negative', es: 'negativa' },
   turnRight: { en: 'right ▶', es: 'derecha ▶' },
   turnLeft: { en: '◀ left', es: '◀ izquierda' },
   straight: { en: '— straight', es: '— recto' },

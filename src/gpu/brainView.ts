@@ -9,6 +9,7 @@
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
 import { makeDraggable } from './ui.js';
+import { attachTooltip } from './tooltip.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
 
 export interface BrainView {
@@ -144,11 +145,29 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   const eeg: number[][] = EEG_CHANNELS.map(() => []);
   let lastEegFrame = -1;
 
+  // Legend under the network: what the three columns and the node colours mean.
+  const legend = document.createElement('div');
+  legend.style.cssText =
+    'margin-top:7px;display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;' +
+    'font-size:10.5px;color:var(--ink-faint);';
+  const dot = (rgb: string): string =>
+    `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${rgb};vertical-align:-1px;margin-right:4px"></span>`;
+  function relabelLegend(): void {
+    legend.innerHTML =
+      `<span>${t('bv_legend_cols')}</span>` +
+      `<span>${dot('rgba(63,240,216,0.95)')}${t('bv_pos')}</span>` +
+      `<span>${dot('rgba(255,90,170,0.95)')}${t('bv_neg')}</span>`;
+  }
+  relabelLegend();
+
   const scroll = document.createElement('div');
   scroll.style.cssText = 'overflow:auto;flex:1;';
-  scroll.append(canvas, policyLabel, policy, listens, stats, tapeLabel, tape);
+  scroll.append(canvas, legend, policyLabel, policy, listens, stats, tapeLabel, tape);
   panel.append(header, scroll);
   makeDraggable(panel, header);
+  attachTooltip(title, 'panel_brain');
+  attachTooltip(policyLabel, 'brain_policy');
+  attachTooltip(tapeLabel, 'brain_eeg');
 
   // Selected creature's genome (static per creature) for the policy view.
   let genome: Float32Array | null = null;
@@ -304,6 +323,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     setTrack(false);
     close.title = t('close');
     tapeLabel.textContent = t('eeg_title');
+    relabelLegend();
     refreshPolicy();
     drawTape();
   });
