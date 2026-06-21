@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="PELAGIA — an ocean of artificial life with real neural networks">
+  <defs>
+    <radialGradient id="bg" cx="42%" cy="38%" r="80%">
+      <stop offset="0%" stop-color="#0c2342" />
+      <stop offset="55%" stop-color="#06142b" />
+      <stop offset="100%" stop-color="#02040a" />
+    </radialGradient>
+    <radialGradient id="g" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#bafff4" />
+      <stop offset="45%" stop-color="#3ff0d8" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#3ff0d8" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+
+  <!-- a scattering of glowing creatures (leaf / fish / jelly hints) -->
+  <g opacity="0.95">
+    <g transform="translate(880,150) rotate(20)"><circle r="34" fill="url(#g)" /><path d="M0,-22 C-9,-8 -9,10 0,26 C9,10 9,-8 0,-22Z" fill="#c9fff6" /></g>
+    <g transform="translate(1020,330) rotate(-35)"><circle r="26" fill="url(#g)" /><path d="M0,-16 C-7,-6 -7,8 0,18 C7,8 7,-6 0,-16Z" fill="#a7f0ff" /></g>
+    <g transform="translate(760,420) rotate(70)"><circle r="22" fill="url(#g)" /><path d="M0,-14 C-6,-5 -6,7 0,16 C6,7 6,-5 0,-14Z" fill="#ffd36a" /></g>
+    <g transform="translate(960,470) rotate(140)"><circle r="20" fill="url(#g)" /><path d="M0,-12 C-5,-4 -5,6 0,14 C5,6 5,-4 0,-12Z" fill="#ff7ad0" /></g>
+    <g transform="translate(1080,180) rotate(-10)"><circle r="18" fill="url(#g)" /><path d="M0,-11 C-5,-4 -5,5 0,13 C5,5 5,-4 0,-11Z" fill="#9b8cff" /></g>
+    <g transform="translate(700,240) rotate(50)"><circle r="16" fill="url(#g)" /><path d="M0,-10 C-4,-3 -4,5 0,12 C4,5 4,-3 0,-10Z" fill="#86f7a0" /></g>
+  </g>
+  <!-- faint plankton specks -->
+  <g fill="#3ff0d8" opacity="0.5">
+    <circle cx="650" cy="120" r="3" /><circle cx="1120" cy="420" r="3" /><circle cx="820" cy="540" r="2.5" />
+    <circle cx="600" cy="380" r="2.5" /><circle cx="1140" cy="120" r="2" /><circle cx="900" cy="300" r="2" />
+  </g>
+
+  <!-- wordmark + tagline -->
+  <text x="90" y="300" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="118" font-weight="700" letter-spacing="16" fill="#3ff0d8">PELAGIA</text>
+  <text x="96" y="372" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="34" font-weight="500" fill="#cfe8ff">An ocean of artificial life</text>
+  <text x="96" y="420" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="34" font-weight="500" fill="#8fb6d9">with <tspan fill="#9efced">real neural networks</tspan>, evolving in your browser</text>
+  <text x="96" y="520" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" fill="#6f8aa6">thousands of neural creatures · WebGPU · 60 fps</text>
+</svg>
