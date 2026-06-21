@@ -19,6 +19,7 @@ import { icon } from './icons.js';
 import { makeDraggable, mkPanelHeader } from './ui.js';
 import { attachTooltip } from './tooltip.js';
 import { lineageLabelHtml, onLineageNamesChange } from './lineageNames.js';
+import { openLineageRename } from './lineageRename.js';
 
 const inp = new Float32Array(INPUT_SIZE);
 const hid = new Float32Array(HIDDEN_SIZE);
@@ -166,6 +167,11 @@ export function buildLineagePanel(): LineagePanel {
   const list = document.createElement('div');
   list.style.cssText = 'font:12px var(--font-ui);overflow:auto;flex:1;';
   panel.append(list);
+  // Click a clade's identity line → rename popover (delegated; survives re-renders).
+  list.addEventListener('click', (e) => {
+    const tgt = (e.target as HTMLElement).closest<HTMLElement>('[data-rename]');
+    if (tgt?.dataset.rename) openLineageRename(+tgt.dataset.rename, e.clientX, e.clientY);
+  });
 
   const toggle = document.createElement('button');
   toggle.className = 'pg-btn';
@@ -217,8 +223,10 @@ export function buildLineagePanel(): LineagePanel {
       traitRow('tr_neurons', `${r.neurons}/10`, fillBar(r.neurons, 10, '#9b8cff'));
     return (
       `<div style="margin-bottom:11px;line-height:1.45">` +
+      `<span data-rename="${r.lineage}" title="${t('nameLineage')}" style="cursor:pointer">` +
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
       `${lineageLabelHtml(r.lineage)} · ${r.count} <span style="color:${ac}">${arrow}</span>` +
+      `<span style="opacity:.35;margin-left:6px;vertical-align:-1px;display:inline-block">${icon('pencil', 11)}</span></span>` +
       `<div style="opacity:.7;margin-left:16px;margin-top:2px">${desc}</div>` +
       `<div style="margin-left:16px;margin-top:3px">${traits}</div></div>`
     );

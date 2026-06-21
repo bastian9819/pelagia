@@ -1351,6 +1351,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     hue: number;
     samples: number[];
     lastTick: number;
+    birthTick: number;
     count: number;
     trend: number;
     descKey: string;
@@ -1472,6 +1473,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         aggression: tr.aggression,
         neurons: tr.neurons,
         samples: tr.samples,
+        birthTick: tr.birthTick,
       });
     }
     return { world: worldSeries, lineages, watched: [...watched.values()], parents: parentMap };
@@ -1550,6 +1552,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         hue: floatFromU32(pcgHash(lin)),
         samples: [],
         lastTick: frame,
+        birthTick: frame,
         count: 0,
         trend: 0,
         descKey: meta?.descKey ?? 'desc_erratic',

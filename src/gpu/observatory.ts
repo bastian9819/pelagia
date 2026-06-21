@@ -17,6 +17,7 @@ import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
 import { pcgHash, floatFromU32 } from '../core/rng.js';
 import { lineageLabelHtml, displayLineage, onLineageNamesChange } from './lineageNames.js';
+import { openLineageRename } from './lineageRename.js';
 
 /** Lineage colour from its id — matches the GPU's per-creature hue. */
 const hueOf = (id: number): number => floatFromU32(pcgHash(id));
@@ -55,6 +56,8 @@ export interface LineageHistory {
   neurons: number;
   /** Population samples over time (oldest -> newest), for the rise/fall curve. */
   samples: number[];
+  /** Tick when this clade was first sampled (≈ its birth) — for the time axis. */
+  birthTick: number;
 }
 
 export interface WatchSample {
@@ -218,6 +221,14 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
   inner.append(worldCard.card, lineageCard.card, watchCard.card);
   lineageCard.card.style.marginTop = '16px';
   watchCard.card.style.marginTop = '16px';
+
+  // Delegated click-to-rename: a clade label/row in either card opens the popover.
+  const renameOnClick = (e: MouseEvent): void => {
+    const tgt = (e.target as HTMLElement).closest<HTMLElement>('[data-rename]');
+    if (tgt?.dataset.rename) openLineageRename(+tgt.dataset.rename, e.clientX, e.clientY);
+  };
+  lineageCard.body.addEventListener('click', renameOnClick);
+  watchCard.body.addEventListener('click', renameOnClick);
 
   const toggle = document.createElement('button');
   toggle.className = 'pg-btn';
@@ -387,8 +398,10 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       const left = document.createElement('div');
       left.style.cssText = 'flex:1;min-width:0';
       left.innerHTML =
-        `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
-        `${lineageLabelHtml(r.lineage)} · ${r.count} <span style="color:${ac}">${arrow}</span></div>` +
+        `<div data-rename="${r.lineage}" title="${t('nameLineage')}" style="cursor:pointer">` +
+        `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
+        `${lineageLabelHtml(r.lineage)} · ${r.count} <span style="color:${ac}">${arrow}</span>` +
+        `<span style="opacity:.35;margin-left:6px;vertical-align:-1px;display:inline-block">${icon('pencil', 11)}</span></div>` +
         `<div style="opacity:.7;margin-left:16px">${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}</div>` +
         `<div style="opacity:.5;margin-left:16px;font-size:11px">` +
         `${t('tr_seek')} ${r.seek.toFixed(2)} · ${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
@@ -419,7 +432,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       head.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
       head.innerHTML =
         `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
-        `<b>#${wch.id}</b> · ${t('lineageWord')} ${lineageLabelHtml(wch.lineage)}` +
+        `<b>#${wch.id}</b> · ${t('lineageWord')} <span data-rename="${wch.lineage}" title="${t('nameLineage')}" style="cursor:pointer">${lineageLabelHtml(wch.lineage)}</span>` +
         `${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>`;
       const rm = document.createElement('button');
       rm.innerHTML = icon('close', 15);
@@ -508,6 +521,7 @@ export function buildEvolutionHistory(): HistoryPanel {
   let open = false;
   let last: LineageHistory[] = [];
   let lastParents = new Map<number, number>();
+  let lastTick = 0;
 
   const panel = document.createElement('div');
   panel.style.cssText =
@@ -544,15 +558,43 @@ export function buildEvolutionHistory(): HistoryPanel {
   card.append(chart, timeLbl, legend);
 
   // Family tree (cladogram): who descends from whom, once speciation has branched.
+  // Laid out left→right by birth order with a tick axis, in a horizontal scroller
+  // so deep histories spread out instead of crowding.
   const treeCard = document.createElement('div');
   treeCard.style.cssText = `${CARD}margin-top:16px;`;
   const treeLbl = document.createElement('div');
   treeLbl.style.cssText = 'opacity:.7;font-size:12px;margin-bottom:8px;';
-  const tch = 300;
+  const tch = 360;
+  const treeScroll = document.createElement('div');
+  treeScroll.style.cssText = 'overflow-x:auto;overflow-y:hidden;';
   const tree = document.createElement('canvas');
-  tree.style.cssText = `display:block;width:100%;max-width:${cw}px;height:${tch}px;`;
-  treeCard.append(treeLbl, tree);
+  tree.style.cssText = `display:block;height:${tch}px;cursor:pointer;`;
+  treeScroll.append(tree);
+  treeCard.append(treeLbl, treeScroll);
   inner.append(header, note, card, treeCard);
+
+  // Hit-boxes (CSS px within the tree canvas) for click-to-rename.
+  let treeHits: { id: number; x: number; y: number; r: number }[] = [];
+  tree.addEventListener('click', (e) => {
+    const rect = tree.getBoundingClientRect();
+    const lx = e.clientX - rect.left;
+    const ly = e.clientY - rect.top;
+    let best = -1;
+    let bestD = 16 * 16;
+    for (const h of treeHits) {
+      const d = (h.x - lx) ** 2 + (h.y - ly) ** 2;
+      if (d < bestD && d < (h.r + 8) ** 2) {
+        bestD = d;
+        best = h.id;
+      }
+    }
+    if (best >= 0) openLineageRename(best, e.clientX, e.clientY);
+  });
+  // Muller legend: click a clade to name it.
+  legend.addEventListener('click', (e) => {
+    const tgt = (e.target as HTMLElement).closest<HTMLElement>('[data-rename]');
+    if (tgt?.dataset.rename) openLineageRename(+tgt.dataset.rename, e.clientX, e.clientY);
+  });
 
   const toggle = document.createElement('button');
   toggle.className = 'pg-btn';
@@ -561,7 +603,10 @@ export function buildEvolutionHistory(): HistoryPanel {
   function setOpen(v: boolean): void {
     open = v;
     panel.style.display = v ? 'block' : 'none';
-    if (v) render();
+    if (v) {
+      render();
+      treeScroll.scrollLeft = 0; // start at the roots; scroll right toward "now"
+    }
   }
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && open) setOpen(false);
@@ -613,7 +658,8 @@ export function buildEvolutionHistory(): HistoryPanel {
       .map((l) => {
         const c = `hsl(${Math.round(l.hue * 360)}, 85%, 58%)`;
         return (
-          `<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;` +
+          `<span data-rename="${l.lineage}" title="${t('nameLineage')}" style="white-space:nowrap;cursor:pointer">` +
+          `<span style="display:inline-block;width:10px;height:10px;` +
           `border-radius:2px;background:${c};margin-right:5px"></span>${displayLineage(l.lineage)} · ${l.count} · ${t(l.descKey)}</span>`
         );
       })
@@ -626,15 +672,23 @@ export function buildEvolutionHistory(): HistoryPanel {
     count: number;
     parent: number;
     children: TNode[];
-    depth: number;
-    y: number;
+    birth: number; // birth tick (or estimated for history-less ancestors)
+    col: number; // column index by birth order
+    y: number; // tidy y slot
   }
 
-  // Cladogram: top clades as leaves + their ancestors (via parent pointers), laid
-  // out left→right by depth with each node's y = mean of its children's (tidy-ish).
-  function drawTree(lineages: LineageHistory[], parents: Map<number, number>): void {
-    const ctx = setupCanvas(tree, cw, tch);
-    ctx.clearRect(0, 0, cw, tch);
+  const fmtTick = (tk: number): string =>
+    tk >= 1000 ? `${(tk / 1000).toFixed(1)}k` : `${Math.round(tk)}`;
+
+  // Cladogram: top clades + their ancestors (via parent pointers), laid out
+  // left→right by BIRTH ORDER (one column per clade, evenly spaced so nothing
+  // crowds) with the real birth tick under each column and a horizontal scroll.
+  // y is a tidy layout (leaves on their own row, parents centred on their kids).
+  function drawTree(
+    lineages: LineageHistory[],
+    parents: Map<number, number>,
+    nowTick: number,
+  ): void {
     const byId = new Map(lineages.map((l) => [l.lineage, l]));
     const nodes = new Map<number, TNode>();
     const add = (id: number): TNode => {
@@ -647,7 +701,8 @@ export function buildEvolutionHistory(): HistoryPanel {
           count: l ? l.count : 0,
           parent: parents.get(id) ?? -1,
           children: [],
-          depth: 0,
+          birth: l ? l.birthTick : -1,
+          col: 0,
           y: 0,
         };
         nodes.set(id, nd);
@@ -657,7 +712,7 @@ export function buildEvolutionHistory(): HistoryPanel {
     const top = [...lineages]
       .filter((l) => l.count > 0)
       .sort((a, b) => b.count - a.count)
-      .slice(0, 14);
+      .slice(0, 16);
     for (const l of top) {
       add(l.lineage);
       let id = l.lineage;
@@ -668,61 +723,136 @@ export function buildEvolutionHistory(): HistoryPanel {
         id = p;
       }
     }
-    if (nodes.size === 0) {
-      ctx.fillStyle = 'rgba(207,232,255,0.5)';
-      ctx.font = '13px ui-monospace, monospace';
-      ctx.fillText(t('ph_empty'), 8, 20);
-      return;
-    }
     for (const nd of nodes.values()) {
       if (nd.parent >= 0 && nodes.has(nd.parent)) nodes.get(nd.parent)!.children.push(nd);
     }
+    if (nodes.size === 0) {
+      const ctx0 = setupCanvas(tree, cw, tch);
+      ctx0.clearRect(0, 0, cw, tch);
+      ctx0.fillStyle = 'rgba(207,232,255,0.5)';
+      ctx0.font = '13px ui-monospace, monospace';
+      ctx0.fillText(t('ph_empty'), 8, 20);
+      treeHits = [];
+      return;
+    }
     const roots = [...nodes.values()].filter((n) => n.parent < 0 || !nodes.has(n.parent));
+    // Fill in missing birth ticks (a history-less ancestor is older than its kids).
+    const estimate = (nd: TNode): number => {
+      if (nd.birth >= 0) return nd.birth;
+      let m = nowTick;
+      for (const c of nd.children) m = Math.min(m, estimate(c));
+      nd.birth = Math.max(0, m - 1);
+      return nd.birth;
+    };
+    roots.forEach(estimate);
+
+    // x = column by birth order (even spacing); real ticks go on the axis.
+    const ordered = [...nodes.values()].sort((a, b) => a.birth - b.birth || a.id - b.id);
+    ordered.forEach((nd, i) => (nd.col = i));
+    const cols = ordered.length;
+
+    // y = tidy layout: leaves take sequential rows; parents centre on their kids.
     let leaf = 0;
-    const layout = (nd: TNode, depth: number): void => {
-      nd.depth = depth;
+    const layoutY = (nd: TNode): void => {
       if (nd.children.length === 0) {
         nd.y = leaf++;
       } else {
-        nd.children.forEach((c) => layout(c, depth + 1));
+        nd.children.sort((a, b) => a.birth - b.birth || a.id - b.id);
+        nd.children.forEach(layoutY);
         nd.y = nd.children.reduce((s, c) => s + c.y, 0) / nd.children.length;
       }
     };
-    roots.forEach((r) => layout(r, 0));
-    let maxDepth = 0;
-    for (const nd of nodes.values()) maxDepth = Math.max(maxDepth, nd.depth);
+    roots.sort((a, b) => a.birth - b.birth || a.id - b.id);
+    roots.forEach(layoutY);
     const leaves = Math.max(1, leaf - 1);
-    const mx = 90;
-    const my = 24;
-    const px = (d: number): number => mx + (maxDepth === 0 ? 0 : (d / maxDepth) * (cw - 2 * mx));
-    const py = (y: number): number => my + (y / leaves) * (tch - 2 * my);
-    // edges
-    ctx.strokeStyle = 'rgba(120,160,200,0.35)';
-    ctx.lineWidth = 1.4;
+
+    const COL_W = 108;
+    const mxL = 60;
+    const mxR = 78;
+    const myT = 40;
+    const myB = 34;
+    const contentW = Math.max(cw, mxL + mxR + (cols - 1) * COL_W);
+    const ctx = setupCanvas(tree, contentW, tch);
+    ctx.clearRect(0, 0, contentW, tch);
+    const px = (col: number): number =>
+      cols <= 1 ? contentW / 2 : mxL + col * ((contentW - mxL - mxR) / (cols - 1));
+    const py = (y: number): number => myT + (y / leaves) * (tch - myT - myB);
+
+    // bottom tick axis: a faint vertical guide + the birth tick under each column
+    ctx.font = '9px ui-monospace, monospace';
+    ctx.textBaseline = 'alphabetic';
+    let lastLabel = '';
+    for (const nd of ordered) {
+      const x = px(nd.col);
+      ctx.strokeStyle = 'rgba(120,160,200,0.06)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, myT - 12);
+      ctx.lineTo(x, tch - myB + 4);
+      ctx.stroke();
+      // only label when the tick changes, so a run of same-birth founders reads cleanly
+      const lbl = fmtTick(nd.birth);
+      if (lbl !== lastLabel) {
+        ctx.fillStyle = 'rgba(207,232,255,0.4)';
+        ctx.textAlign = 'center';
+        ctx.fillText(lbl, x, tch - myB + 18);
+        lastLabel = lbl;
+      }
+    }
+    ctx.fillStyle = 'rgba(207,232,255,0.55)';
+    ctx.textAlign = 'left';
+    ctx.fillText(t('tickWord'), 6, tch - myB + 18);
+    if (nowTick > 0) {
+      ctx.textAlign = 'right';
+      ctx.fillText(`${t('now')} · ${fmtTick(nowTick)}`, contentW - 6, tch - myB + 18);
+    }
+
+    // edges: smooth left→right curves tinted parent-hue → child-hue
+    ctx.lineWidth = 1.7;
     for (const nd of nodes.values()) {
       for (const c of nd.children) {
+        const x0 = px(nd.col);
+        const y0 = py(nd.y);
+        const x1 = px(c.col);
+        const y1 = py(c.y);
+        const mid = (x0 + x1) / 2;
+        const grad = ctx.createLinearGradient(x0, 0, x1, 0);
+        grad.addColorStop(0, `hsla(${Math.round(nd.hue * 360)},80%,60%,0.22)`);
+        grad.addColorStop(1, `hsla(${Math.round(c.hue * 360)},80%,62%,0.6)`);
+        ctx.strokeStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(px(nd.depth), py(nd.y));
-        ctx.lineTo(px(c.depth), py(c.y));
+        ctx.moveTo(x0, y0);
+        ctx.bezierCurveTo(mid, y0, mid, y1, x1, y1);
         ctx.stroke();
       }
     }
-    // nodes
-    ctx.font = '10px ui-monospace, monospace';
+
+    // nodes: glowing discs + name labels above; record hit-boxes for rename
+    treeHits = [];
     ctx.textBaseline = 'middle';
     for (const nd of nodes.values()) {
-      const x = px(nd.depth);
+      const x = px(nd.col);
       const y = py(nd.y);
-      const r = 3 + Math.min(11, Math.sqrt(nd.count));
+      const r = 4 + Math.min(13, Math.sqrt(nd.count));
+      const col = `hsl(${Math.round(nd.hue * 360)}, 85%, 60%)`;
+      ctx.save();
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = `hsl(${Math.round(nd.hue * 360)}, 85%, 58%)`;
+      ctx.fillStyle = col;
       ctx.fill();
-      if (nd.count > 0) {
-        ctx.fillStyle = 'rgba(207,232,255,0.7)';
-        ctx.textAlign = 'left';
-        ctx.fillText(`#${nd.id}`, x + r + 3, y);
-      }
+      ctx.restore();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.stroke();
+      const name = displayLineage(nd.id);
+      const label = name.length > 14 ? name.slice(0, 13) + '…' : name;
+      ctx.font = '10.5px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = nd.count > 0 ? 'rgba(207,232,255,0.85)' : 'rgba(207,232,255,0.45)';
+      ctx.fillText(label, x, y - r - 9);
+      treeHits.push({ id: nd.id, x, y, r });
     }
   }
 
@@ -731,10 +861,10 @@ export function buildEvolutionHistory(): HistoryPanel {
     h1.textContent = `PELAGIA · ${t('ph_title')}`;
     note.textContent = t('ph_note');
     timeLbl.textContent = t('ph_time');
-    treeLbl.textContent = t('ph_tree');
+    treeLbl.textContent = `${t('ph_tree')} — ${t('hist_births')}`;
     drawMuller(last);
     renderLegend(last);
-    drawTree(last, lastParents);
+    drawTree(last, lastParents, lastTick);
   }
 
   function relabelToggle(): void {
@@ -755,6 +885,7 @@ export function buildEvolutionHistory(): HistoryPanel {
     update(data) {
       last = data.lineages;
       lastParents = data.parents;
+      lastTick = data.world[data.world.length - 1]?.tick ?? lastTick;
       render();
     },
   };
