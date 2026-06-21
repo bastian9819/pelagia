@@ -1214,6 +1214,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     btn.className = 'pg-switch';
     btn.innerHTML = '<span class="pg-knob"></span><span></span>';
     btn.onclick = () => applyParams([[def.idx, pf[def.idx]! > 0 ? 0 : def.on]]);
+    attachTooltip(btn, def.key);
     toggleBtns.push({ btn, def });
     togWrap.append(btn);
   }
@@ -1235,6 +1236,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     const btn = mkChip(() =>
       applyParams(Object.entries(p.set).map(([k, v]) => [Number(k), clampTo(Number(k), v)])),
     );
+    attachTooltip(btn, p.key);
     presetBtns.push({ btn, key: p.key });
     presetWrap.append(btn);
   }
@@ -1258,6 +1260,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     applyParams(entries);
     applyHash({ seed, n, params: godPanel.getValues() });
   });
+  attachTooltip(diceBtn, 'pre_dice');
   presetWrap.append(diceBtn);
 
   godPanel.extras.append(togWrap, presetWrap);
@@ -1364,9 +1367,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
 
   const observatory = buildObservatory((id) => removeWatch(id));
   document.body.appendChild(observatory.panel);
+  attachTooltip(observatory.toggle, 'menu_observatory');
   ui.addTool(observatory.toggle);
   const history = buildEvolutionHistory();
   document.body.appendChild(history.panel);
+  attachTooltip(history.toggle, 'menu_history');
   ui.addTool(history.toggle);
 
   // Highlight: dim everything but the selected creature's lineage (follow a clade).
@@ -1381,6 +1386,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelHighlight();
   onLang(relabelHighlight);
+  attachTooltip(highlightBtn, 'menu_highlight');
   ui.addTool(highlightBtn);
 
   // "Show fields": reveal the thermal biomes as a faint background tint.
@@ -1394,6 +1400,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelFields();
   onLang(relabelFields);
+  attachTooltip(fieldsBtn, 'menu_fields');
   ui.addTool(fieldsBtn);
 
   // "Follow": lock the camera onto the selected creature to watch its life up close.
@@ -1407,6 +1414,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelFollow();
   onLang(relabelFollow);
+  attachTooltip(followBtn, 'menu_follow');
   ui.addTool(followBtn);
 
   // "Show currents": animated streaks revealing the flow field.
@@ -1420,6 +1428,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelCurrent();
   onLang(relabelCurrent);
+  attachTooltip(currentBtn, 'menu_currents');
   ui.addTool(currentBtn);
 
   // "Show pheromones": reveal the trails creatures lay down as glowing green paths.
@@ -1433,6 +1442,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   }
   relabelPhero();
   onLang(relabelPhero);
+  attachTooltip(pheroBtn, 'menu_phero');
   ui.addTool(pheroBtn);
 
   function addWatch(id: number, lineage: number): void {

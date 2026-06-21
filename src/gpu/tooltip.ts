@@ -491,6 +491,206 @@ const TIPS: Record<string, TipEntry> = {
     en: { title: 'Day length', body: 'How long one day/night cycle lasts, in ticks.' },
     es: { title: 'Duración del día', body: 'Cuánto dura un ciclo día/noche, en ticks.' },
   },
+  // --- Mechanism toggles (on/off switches) ---
+  tog_predation: {
+    en: {
+      title: 'Predation',
+      body: 'Turn hunting on or off. When on, bigger creatures can eat smaller neighbours, so predator and prey lineages emerge.',
+    },
+    es: {
+      title: 'Depredación',
+      body: 'Activa o desactiva la caza. Con ella, las más grandes pueden comerse a vecinas más pequeñas, y surgen linajes depredadores y presa.',
+    },
+  },
+  tog_daynight: {
+    en: {
+      title: 'Day / night',
+      body: 'Turn the day/night cycle on or off. Food booms by day and grows scarce by night, so the population rises and falls.',
+    },
+    es: {
+      title: 'Día / noche',
+      body: 'Activa o desactiva el ciclo día/noche. La comida abunda de día y escasea de noche, así la población sube y baja.',
+    },
+  },
+  tog_speciation: {
+    en: {
+      title: 'Speciation',
+      body: 'Turn lineage branching on or off. When on, some newborns found a new family (new colour), so the tree of life branches over time.',
+    },
+    es: {
+      title: 'Especiación',
+      body: 'Activa o desactiva la ramificación de linajes. Con ella, algunas crías fundan una familia nueva (color nuevo) y el árbol de la vida se ramifica.',
+    },
+  },
+  tog_bigfood: {
+    en: {
+      title: 'Big food',
+      body: 'Turn the rare golden big-food on or off. It appears in tight blooms worth far more energy than plankton.',
+    },
+    es: {
+      title: 'Comida grande',
+      body: 'Activa o desactiva la rara comida grande dorada. Aparece en floraciones densas que valen mucha más energía que el plancton.',
+    },
+  },
+  tog_current: {
+    en: {
+      title: 'Current',
+      body: 'Turn the ocean current on or off. It drags creatures and food into drifting gyres.',
+    },
+    es: {
+      title: 'Corriente',
+      body: 'Activa o desactiva la corriente oceánica. Arrastra criaturas y comida en remolinos a la deriva.',
+    },
+  },
+  tog_carrion: {
+    en: {
+      title: 'Carrion',
+      body: 'Turn carrion on or off. When on, dead creatures leave food where they fell, feeding scavengers.',
+    },
+    es: {
+      title: 'Carroña',
+      body: 'Activa o desactiva la carroña. Con ella, las criaturas muertas dejan comida donde caen, alimentando carroñeros.',
+    },
+  },
+  // --- Scenario presets ---
+  pre_eden: {
+    en: {
+      title: 'Eden',
+      body: 'A gentle paradise: abundant food, no predation, cheap living. The ocean fills up calmly.',
+    },
+    es: {
+      title: 'Edén',
+      body: 'Un paraíso apacible: comida abundante, sin depredación, vida barata. El océano se llena con calma.',
+    },
+  },
+  pre_famine: {
+    en: {
+      title: 'Famine',
+      body: 'Scarce food, costly living and predation — a harsh world that selects hard.',
+    },
+    es: {
+      title: 'Hambruna',
+      body: 'Comida escasa, vida cara y depredación — un mundo duro que selecciona con fuerza.',
+    },
+  },
+  pre_carnage: {
+    en: {
+      title: 'Carnage',
+      body: 'Predation maxed with an easy size advantage — hunters everywhere.',
+    },
+    es: {
+      title: 'Carnicería',
+      body: 'Depredación al máximo con ventaja de tamaño fácil — cazadores por todas partes.',
+    },
+  },
+  pre_soup: {
+    en: {
+      title: 'Primordial soup',
+      body: 'High mutation and speciation — fast, chaotic evolution with many new lineages.',
+    },
+    es: {
+      title: 'Sopa primordial',
+      body: 'Mutación y especiación altas — evolución rápida y caótica con muchos linajes nuevos.',
+    },
+  },
+  pre_night: {
+    en: {
+      title: 'Eternal night',
+      body: 'A strong, long day/night cycle — dramatic booms and busts.',
+    },
+    es: {
+      title: 'Noche eterna',
+      body: 'Un ciclo día/noche fuerte y largo — auges y caídas dramáticos.',
+    },
+  },
+  pre_titans: {
+    en: { title: 'Titans', body: 'Strong predation plus rich big-food — favours large hunters.' },
+    es: {
+      title: 'Titanes',
+      body: 'Depredación fuerte y comida grande abundante — favorece a grandes cazadores.',
+    },
+  },
+  pre_dice: {
+    en: {
+      title: 'Random world',
+      body: 'Roll every setting at once (kept away from instant extinction) for a fresh, shareable ocean.',
+    },
+    es: {
+      title: 'Mundo aleatorio',
+      body: 'Tira todos los ajustes a la vez (evitando la extinción inmediata) para un océano nuevo y compartible.',
+    },
+  },
+  // --- Menu panel/visualisation toggles ---
+  menu_observatory: {
+    en: {
+      title: 'Observatory',
+      body: 'A full-screen dashboard: charts of the world over time, lineage histories and the creatures you track.',
+    },
+    es: {
+      title: 'Observatorio',
+      body: 'Un panel a pantalla completa: gráficas del mundo en el tiempo, historia de los linajes y las criaturas que sigas.',
+    },
+  },
+  menu_history: {
+    en: {
+      title: 'Evolutionary history',
+      body: 'A full-screen view of how lineages rose, dominated and went extinct, plus the family tree.',
+    },
+    es: {
+      title: 'Historia evolutiva',
+      body: 'Una vista a pantalla completa de cómo los linajes surgieron, dominaron y se extinguieron, con su árbol genealógico.',
+    },
+  },
+  menu_highlight: {
+    en: {
+      title: 'Highlight lineage',
+      body: "Dim every creature except the selected one's family, so you can follow a single clade through the crowd.",
+    },
+    es: {
+      title: 'Resaltar linaje',
+      body: 'Atenúa a todas las criaturas salvo la familia de la seleccionada, para seguir un solo clado entre la multitud.',
+    },
+  },
+  menu_fields: {
+    en: {
+      title: 'Show biomes',
+      body: 'Tint the background by water temperature (blue cold, red warm) to reveal the thermal biomes creatures adapt to.',
+    },
+    es: {
+      title: 'Mostrar biomas',
+      body: 'Tiñe el fondo por temperatura del agua (azul frío, rojo cálido) para ver los biomas térmicos a los que se adaptan.',
+    },
+  },
+  menu_follow: {
+    en: {
+      title: 'Follow camera',
+      body: 'Lock the camera onto the selected creature to watch its life up close.',
+    },
+    es: {
+      title: 'Seguir cámara',
+      body: 'Fija la cámara en la criatura seleccionada para ver su vida de cerca.',
+    },
+  },
+  menu_currents: {
+    en: {
+      title: 'Show currents',
+      body: 'Reveal the invisible ocean current as animated flow streaks.',
+    },
+    es: {
+      title: 'Mostrar corrientes',
+      body: 'Revela la corriente oceánica invisible como estrías de flujo animadas.',
+    },
+  },
+  menu_phero: {
+    en: {
+      title: 'Show trails',
+      body: 'Reveal the pheromone field — the chemical trails creatures lay down and can follow.',
+    },
+    es: {
+      title: 'Mostrar rastros',
+      body: 'Revela el campo de feromonas — los rastros químicos que las criaturas dejan y pueden seguir.',
+    },
+  },
 };
 
 let tipEl: HTMLDivElement | null = null;
