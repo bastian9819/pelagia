@@ -203,7 +203,7 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
   const aliveHistory: number[] = [];
 
   const panel = document.createElement('div');
-  panel.className = 'pg-panel';
+  panel.className = 'pg-panel pg-hud';
   panel.style.cssText =
     'position:fixed;top:14px;left:14px;padding:13px 15px;min-width:196px;user-select:none;';
 
@@ -235,7 +235,7 @@ export function buildUi(onFit: () => void, onStep: () => void, color: ColorContr
   const sctx = spark.getContext('2d')!;
 
   const controls = document.createElement('div');
-  controls.className = 'pg-panel';
+  controls.className = 'pg-panel pg-transport';
   controls.style.cssText =
     'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:6px;' +
     'align-items:center;padding:7px;border-radius:14px;max-width:96vw;';

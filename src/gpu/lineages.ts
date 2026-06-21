@@ -156,7 +156,7 @@ export interface LineagePanel {
 
 export function buildLineagePanel(): LineagePanel {
   const panel = document.createElement('div');
-  panel.className = 'pg-panel';
+  panel.className = 'pg-panel pg-float';
   panel.style.cssText =
     'position:fixed;left:320px;top:80px;width:266px;max-height:calc(100vh - 60px);' +
     'display:none;flex-direction:column;overflow:hidden;padding:14px 15px;z-index:10;';

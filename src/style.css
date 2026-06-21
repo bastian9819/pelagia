@@ -46,6 +46,9 @@ body {
   display: block;
   width: 100vw;
   height: 100vh;
+  /* We handle pan/zoom (incl. two-finger pinch) ourselves; stop the browser's
+     default touch gestures so the canvas gets every pointer event. */
+  touch-action: none;
 }
 
 /* ---- Design-system components (shared across the UI) ------------------- */
@@ -267,20 +270,97 @@ input[type='range'].pg-range::-moz-range-thumb {
   }
 }
 
-/* Compatibility-mode banner (shown when WebGPU is unavailable). */
+/* Compatibility notice (shown when WebGPU is unavailable): a dismissible card. */
 .banner {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
-  text-align: center;
-  font-size: 13px;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  max-width: min(92vw, 460px);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--ink);
-  background: rgba(11, 31, 58, 0.92);
-  border-bottom: 1px solid var(--border-2);
+  background: var(--surface-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
   z-index: 9;
 }
 .banner a {
   color: var(--glow-cyan);
+}
+.banner button {
+  flex: none;
+  margin: -2px -2px 0 0;
+  padding: 2px;
+  background: none;
+  border: 0;
+  color: var(--ink-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.banner button:hover {
+  color: var(--ink);
+}
+
+/* ---- Mobile / narrow viewports ---------------------------------------- *
+ * Most chrome is positioned with inline styles, so these overrides use
+ * !important. Goal: nothing overflows or overlaps on a phone, and the
+ * floating panels open full-width near the top instead of off-screen. */
+@media (max-width: 640px) {
+  /* Shrink the stats HUD so it doesn't dominate a small screen. */
+  .pg-hud {
+    transform: scale(0.82);
+    transform-origin: top left;
+  }
+  /* Colour legend: smaller and nudged below the HUD so they never collide. */
+  .pg-legend {
+    top: 8px !important;
+    left: auto !important;
+    right: 8px !important;
+    transform: none !important;
+    font-size: 11px !important;
+    padding: 5px 9px !important;
+    max-width: calc(100vw - 130px) !important;
+    overflow: hidden !important;
+  }
+  /* Transport bar: tighter so all controls fit a phone width. */
+  .pg-transport {
+    bottom: 10px !important;
+    gap: 3px !important;
+    padding: 5px !important;
+  }
+  .pg-transport .pg-btn {
+    padding: 0 9px !important;
+  }
+  /* Brush dock: stack it ABOVE the transport bar and let it scroll sideways. */
+  .pg-brushdock {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 64px !important;
+    overflow-x: auto !important;
+    justify-content: flex-start !important;
+  }
+  /* Floating panels open full-width near the top (their default desktop spots
+     would land partly off a narrow screen). Still draggable/resizable. */
+  .pg-float {
+    left: 8px !important;
+    right: 8px !important;
+    top: 54px !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: calc(100vh - 150px) !important;
+  }
+  /* Pop-up menu: a touch wider for comfortable tapping. */
+  .pg-iconbtn {
+    min-width: var(--ctl-h);
+  }
 }

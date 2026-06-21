@@ -260,6 +260,19 @@ const S: Dict = {
   tr_aggr: { en: 'aggression', es: 'agresión' },
   tr_neurons: { en: 'neurons', es: 'neuronas' },
   loading: { en: 'summoning the ocean…', es: 'invocando el océano…' },
+  compat_noWebGPU: {
+    en: "Your browser doesn't support WebGPU.",
+    es: 'Tu navegador no soporta WebGPU.',
+  },
+  compat_initFail: {
+    en: "Couldn't start WebGPU on this device.",
+    es: 'No se pudo iniciar WebGPU en este equipo.',
+  },
+  compat_bodyA: {
+    en: 'Showing a reduced CPU version. For the full experience use a browser with ',
+    es: 'Mostrando una versión reducida en CPU. Para la experiencia completa usa un navegador con ',
+  },
+  compat_bodyB: { en: ' (Chrome, Edge, Safari 26+).', es: ' (Chrome, Edge, Safari 26+).' },
   desc_bigfeeder: { en: 'targets big-food blooms', es: 'busca floraciones de comida grande' },
   desc_chase: { en: 'chases food head-on', es: 'persigue la comida de frente' },
   desc_steer: { en: 'steers toward food (cautious)', es: 'gira hacia la comida (cauta)' },

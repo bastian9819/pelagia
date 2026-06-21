@@ -80,7 +80,7 @@ function actColor(v: number): string {
 
 export function buildBrainView(onClose: () => void, onTrack: () => void): BrainView {
   const panel = document.createElement('div');
-  panel.className = 'pg-panel';
+  panel.className = 'pg-panel pg-float';
   panel.style.cssText =
     'position:fixed;top:14px;right:14px;width:348px;max-height:calc(100vh - 28px);' +
     'display:none;flex-direction:column;overflow:hidden;padding:13px 15px;font:12px var(--font-ui);z-index:10;';

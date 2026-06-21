@@ -35,7 +35,7 @@ if (engine === 'cpu') {
 // --- The production ocean, with loading + WebGPU detection + CPU fallback ---
 async function bootOcean(target: HTMLCanvasElement): Promise<void> {
   if (!('gpu' in navigator)) {
-    fallbackToCpu('Tu navegador no soporta WebGPU.');
+    fallbackToCpu(t('compat_noWebGPU'));
     return;
   }
   const n = Math.max(1, Number(params.get('n') ?? 20000));
@@ -47,14 +47,23 @@ async function bootOcean(target: HTMLCanvasElement): Promise<void> {
   } catch (err) {
     console.error(err);
     loading.remove();
-    fallbackToCpu('No se pudo iniciar WebGPU en este equipo.');
+    fallbackToCpu(t('compat_initFail'));
   }
 }
 
 function fallbackToCpu(reason: string): void {
   const b = document.createElement('div');
   b.className = 'banner';
-  b.innerHTML = `${reason} Mostrando una versión reducida en CPU. Para la experiencia completa, usa un navegador con <a href="https://caniuse.com/webgpu" target="_blank" rel="noopener">WebGPU</a> (Chrome, Edge, Safari 26+).`;
+  const msg = document.createElement('div');
+  msg.innerHTML =
+    `<b>${reason}</b> ${t('compat_bodyA')}` +
+    `<a href="https://caniuse.com/webgpu" target="_blank" rel="noopener">WebGPU</a>` +
+    `${t('compat_bodyB')}`;
+  const close = document.createElement('button');
+  close.setAttribute('aria-label', t('close'));
+  close.textContent = '×';
+  close.onclick = () => b.remove();
+  b.append(msg, close);
   document.body.appendChild(b);
   runCpuView(canvas);
 }

@@ -718,6 +718,18 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   let dragMoved = false;
   let lastX = 0;
   let lastY = 0;
+  // Multi-touch: track active pointers so two fingers pinch-zoom + pan (mobile).
+  const pointers = new Map<number, { x: number; y: number }>();
+  let multiTouch = false; // true for the whole gesture once a 2nd finger touched
+  let pinchDist = 0;
+  let pinchMx = 0;
+  let pinchMy = 0;
+  function startPinch(): void {
+    const pts = [...pointers.values()];
+    pinchDist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y) || 1;
+    pinchMx = (pts[0]!.x + pts[1]!.x) / 2;
+    pinchMy = (pts[0]!.y + pts[1]!.y) / 2;
+  }
 
   // Brush area-of-effect ring: a circle under the cursor showing exactly where (and
   // how big) the active brush acts. Without it, attract/repel/mutate looked like
@@ -748,6 +760,20 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     } catch {
       /* ignore (e.g. synthetic events) */
     }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // A second finger → pinch: cancel any single-finger pan/paint and zoom instead.
+    if (pointers.size === 2) {
+      multiTouch = true;
+      dragging = false;
+      if (painting) {
+        painting = false;
+        writeBrushParams();
+      }
+      brushRing.style.display = 'none';
+      startPinch();
+      return;
+    }
+    if (pointers.size > 2) return;
     if (BRUSH.tool !== 0) {
       painting = true;
       const { wx, wy } = screenToWorld(e.clientX, e.clientY);
@@ -768,6 +794,30 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     lastY = e.clientY;
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // Pinch-zoom + two-finger pan (mobile): scale around the fingers' midpoint.
+    if (pointers.size >= 2) {
+      const pts = [...pointers.values()];
+      const dist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y) || 1;
+      const mx = (pts[0]!.x + pts[1]!.x) / 2;
+      const my = (pts[0]!.y + pts[1]!.y) / 2;
+      const dpr = canvas.width / window.innerWidth;
+      cam.cx -= ((mx - pinchMx) * dpr) / ppwNow(); // pan by the midpoint movement
+      cam.cy -= ((my - pinchMy) * dpr) / ppwNow();
+      clampCam();
+      const before = screenToWorld(mx, my);
+      cam.zoom *= dist / pinchDist; // zoom by the spread ratio, midpoint fixed
+      clampCam();
+      const after = screenToWorld(mx, my);
+      cam.cx += before.wx - after.wx;
+      cam.cy += before.wy - after.wy;
+      clampCam();
+      updateView();
+      pinchDist = dist;
+      pinchMx = mx;
+      pinchMy = my;
+      return;
+    }
     if (BRUSH.tool !== 0) updateBrushRing(e.clientX, e.clientY); // preview the area
     if (painting) {
       const { wx, wy } = screenToWorld(e.clientX, e.clientY);
@@ -789,7 +839,24 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     clampCam();
     updateView();
   });
-  canvas.addEventListener('pointerup', (e) => {
+  function endPointer(e: PointerEvent): void {
+    pointers.delete(e.pointerId);
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (pointers.size >= 2) {
+      startPinch(); // a finger lifted but ≥2 remain — re-baseline the pinch
+      return;
+    }
+    // A multi-touch gesture (pinch) is only over once EVERY finger is up; until then
+    // don't pan or select with a leftover finger.
+    if (multiTouch) {
+      dragging = false;
+      if (pointers.size === 0) multiTouch = false;
+      return;
+    }
     if (painting) {
       painting = false;
       writeBrushParams(); // mode -> 0 (forces stop)
@@ -800,14 +867,16 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       const { wx, wy } = screenToWorld(e.clientX, e.clientY);
       void selectNear(wx, wy);
     }
-  });
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
 
   resize();
   window.addEventListener('resize', resize);
 
   // --- Brush toolbar (bottom-left): pick a tool, then drag over the ocean. ---
   const brushBar = document.createElement('div');
-  brushBar.className = 'pg-panel';
+  brushBar.className = 'pg-panel pg-brushdock';
   brushBar.style.cssText =
     'position:fixed;left:14px;bottom:18px;display:flex;gap:4px;align-items:center;z-index:6;' +
     'padding:7px;border-radius:14px;';
@@ -926,7 +995,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const RAMP_CSS =
     'linear-gradient(90deg,hsl(238,68%,56%),hsl(186,70%,50%),hsl(120,60%,48%),hsl(54,85%,55%),hsl(0,72%,56%))';
   const colorLegend = document.createElement('div');
-  colorLegend.className = 'pg-panel';
+  colorLegend.className = 'pg-panel pg-legend';
   colorLegend.style.cssText =
     'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:6;padding:7px 13px;' +
     'display:flex;align-items:center;gap:9px;font:12px var(--font-ui);white-space:nowrap;';
@@ -1315,7 +1384,8 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   const helpCard = document.createElement('div');
   helpCard.className = 'pg-panel';
   helpCard.style.cssText =
-    'max-width:540px;margin:16px;padding:26px 28px;font:14px/1.7 var(--font-ui);position:relative;';
+    'max-width:540px;margin:16px;padding:26px 28px;font:14px/1.7 var(--font-ui);position:relative;' +
+    'max-height:calc(100vh - 32px);overflow:auto;';
   const helpTitle = document.createElement('div');
   helpTitle.style.cssText =
     'font-size:19px;font-weight:600;letter-spacing:.02em;color:var(--glow-cyan);margin-bottom:14px;';
