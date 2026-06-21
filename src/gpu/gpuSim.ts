@@ -44,6 +44,8 @@ import {
   type WatchSample,
 } from './observatory.js';
 import { t, onLang } from './i18n.js';
+import { nextStepCap } from './turbo.js';
+import { inferExtinctionCause } from './extinction.js';
 import { setLineageSeed } from './lineageNames.js';
 import { parseShareState, buildShareUrl, applyHash, copyToClipboard } from './share.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
@@ -1361,6 +1363,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     cruise: number;
     aggression: number;
     neurons: number;
+    peak: number;
+    extinct: boolean;
+    deathTick: number;
+    causeKey: string;
+    causeDetail: number;
   }
   const worldSeries: WorldSample[] = [];
   const lineageHist = new Map<number, LinTrack>();
@@ -1474,6 +1481,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         neurons: tr.neurons,
         samples: tr.samples,
         birthTick: tr.birthTick,
+        peak: tr.peak,
+        extinct: tr.extinct,
+        deathTick: tr.deathTick,
+        causeKey: tr.causeKey,
+        causeDetail: tr.causeDetail,
       });
     }
     return { world: worldSeries, lineages, watched: [...watched.values()], parents: parentMap };
@@ -1539,9 +1551,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // Maintain per-clade population curves on ONE shared time axis (every tracked
   // clade gets exactly one sample per call, 0 when absent), so they can be stacked
   // into a Muller plot. Track newly-seen clades; bound the map (evict long-extinct).
+  // On extinction, record a likely cause (see extinction.ts).
   function updateLineageHistories(
     counts: Map<number, number>,
     poolMeta: Map<number, LineageTraits>,
+    ctx: { predGain: number; aliveCount: number; foodAlive: number },
   ): void {
     // 1. Start tracking newly-seen, sizeable/characterised clades.
     for (const [lin, count] of counts) {
@@ -1562,7 +1576,25 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         cruise: meta?.cruise ?? 0,
         aggression: meta?.aggression ?? 0,
         neurons: meta?.neurons ?? 0,
+        peak: 0,
+        extinct: false,
+        deathTick: 0,
+        causeKey: '',
+        causeDetail: 0,
       });
+    }
+    // Apex predator right now (likely culprit for prey extinctions): the alive,
+    // aggressive clade with the most "hunting pressure" (aggression × numbers).
+    let predator = -1;
+    let predScore = 0;
+    for (const [lin, tr] of lineageHist) {
+      if (tr.count > 0 && tr.aggression > 0.1) {
+        const s = tr.aggression * tr.count;
+        if (s > predScore) {
+          predScore = s;
+          predator = lin;
+        }
+      }
     }
     // 2. Append one aligned sample to every tracked clade + refresh its traits.
     for (const [lin, tr] of lineageHist) {
@@ -1578,7 +1610,29 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
         tr.neurons = meta.neurons;
       }
       tr.trend = c - tr.count;
+      // Detect the moment of extinction (had members, now none) and record a cause.
+      if (tr.count > 0 && c === 0 && !tr.extinct) {
+        tr.extinct = true;
+        tr.deathTick = frame;
+        const cause = inferExtinctionCause(
+          {
+            peak: tr.peak,
+            aggression: tr.aggression,
+            forage: tr.forage,
+            seek: tr.seek,
+            descKey: tr.descKey,
+          },
+          ctx,
+          predator,
+        );
+        tr.causeKey = cause.key;
+        tr.causeDetail = cause.detail;
+      } else if (c > 0 && tr.extinct) {
+        tr.extinct = false; // resurrected (e.g. a seed-brush reuse) — clear the mark
+        tr.causeKey = '';
+      }
       tr.count = c;
+      if (c > tr.peak) tr.peak = c;
       if (c > 0) tr.lastTick = frame;
       tr.samples.push(c);
       if (tr.samples.length > MAX_WORLD_SAMPLES) tr.samples.shift();
@@ -1753,7 +1807,11 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
       lineagePanel.update(rows);
 
       // --- Observatory time series ---
-      updateLineageHistories(counts, poolMeta);
+      updateLineageHistories(counts, poolMeta, {
+        predGain: pf[24]!,
+        aliveCount,
+        foodAlive,
+      });
       worldSeries.push({
         tick: frame,
         alive: aliveCount,
@@ -1964,10 +2022,9 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     const tNow = performance.now();
     const frameDt = tNow - lastFrameT;
     lastFrameT = tNow;
-    if (!ui.paused && frameDt > 0 && frameDt < 250) {
-      if (frameDt > 28) maxSteps = Math.max(1, maxSteps * 0.85);
-      else if (frameDt < 18) maxSteps = Math.min(32, maxSteps * 1.08);
-    }
+    // Keep turbo smooth under heavy load (e.g. healing blooms the population): an
+    // AIMD step-cap controller that settles instead of oscillating. See turbo.ts.
+    if (!ui.paused) maxSteps = nextStepCap(maxSteps, frameDt);
 
     let steps = 0;
     if (!ui.paused) {

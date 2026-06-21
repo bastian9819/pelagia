@@ -58,6 +58,16 @@ export interface LineageHistory {
   samples: number[];
   /** Tick when this clade was first sampled (≈ its birth) — for the time axis. */
   birthTick: number;
+  /** Largest population this clade ever reached (for ranking dead clades too). */
+  peak: number;
+  /** True once the clade hit zero population. */
+  extinct: boolean;
+  /** Tick it went extinct (0 if still alive). */
+  deathTick: number;
+  /** i18n key for the likely cause of extinction ('' if alive). */
+  causeKey: string;
+  /** For predation deaths: the lineage id of the likely predator (0 if none). */
+  causeDetail: number;
 }
 
 export interface WatchSample {
@@ -573,23 +583,75 @@ export function buildEvolutionHistory(): HistoryPanel {
   treeCard.append(treeLbl, treeScroll);
   inner.append(header, note, card, treeCard);
 
-  // Hit-boxes (CSS px within the tree canvas) for click-to-rename.
-  let treeHits: { id: number; x: number; y: number; r: number }[] = [];
-  tree.addEventListener('click', (e) => {
-    const rect = tree.getBoundingClientRect();
-    const lx = e.clientX - rect.left;
-    const ly = e.clientY - rect.top;
-    let best = -1;
+  // Hit-boxes (CSS px within the tree canvas) for click-to-rename + hover-for-story.
+  interface TreeHit {
+    id: number;
+    x: number;
+    y: number;
+    r: number;
+    count: number;
+    extinct: boolean;
+    deathTick: number;
+    causeKey: string;
+    causeDetail: number;
+  }
+  let treeHits: TreeHit[] = [];
+  const hitAt = (lx: number, ly: number): TreeHit | null => {
+    let best: TreeHit | null = null;
     let bestD = 16 * 16;
     for (const h of treeHits) {
       const d = (h.x - lx) ** 2 + (h.y - ly) ** 2;
       if (d < bestD && d < (h.r + 8) ** 2) {
         bestD = d;
-        best = h.id;
+        best = h;
       }
     }
-    if (best >= 0) openLineageRename(best, e.clientX, e.clientY);
+    return best;
+  };
+  tree.addEventListener('click', (e) => {
+    const rect = tree.getBoundingClientRect();
+    const h = hitAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (h) openLineageRename(h.id, e.clientX, e.clientY);
   });
+  // Floating story tooltip: hover a node to read its fate (esp. how a clade died).
+  const treeTip = document.createElement('div');
+  treeTip.className = 'pg-panel';
+  treeTip.style.cssText =
+    'position:fixed;z-index:1200;display:none;pointer-events:none;max-width:240px;' +
+    'padding:8px 10px;font:12px var(--font-ui);line-height:1.4;';
+  document.body.append(treeTip);
+  tree.addEventListener('mousemove', (e) => {
+    const rect = tree.getBoundingClientRect();
+    const h = hitAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (!h) {
+      treeTip.style.display = 'none';
+      tree.style.cursor = 'pointer';
+      return;
+    }
+    treeTip.innerHTML = treeStory(h);
+    treeTip.style.display = 'block';
+    const tw = treeTip.offsetWidth || 220;
+    treeTip.style.left = `${Math.min(e.clientX + 14, window.innerWidth - tw - 8)}px`;
+    treeTip.style.top = `${Math.min(e.clientY + 14, window.innerHeight - treeTip.offsetHeight - 8)}px`;
+    tree.style.cursor = 'pointer';
+  });
+  tree.addEventListener('mouseleave', () => (treeTip.style.display = 'none'));
+  // The story shown on hover: a living clade's size, or an extinct one's fate + cause.
+  function treeStory(h: TreeHit): string {
+    const name = `<b>${displayLineage(h.id)}</b>`;
+    if (h.extinct) {
+      let cause = h.causeKey ? t(h.causeKey) : t('ext_faded');
+      if (h.causeKey === 'ext_predated' && h.causeDetail > 0)
+        cause += ` ${t('ext_by')} ${displayLineage(h.causeDetail)}`;
+      return (
+        `${name} · <span style="color:#ff5aa6">✝ ${t('ext_extinct')}</span> ` +
+        `<span style="opacity:.6">(${t('ext_at')} ${h.deathTick})</span><br>` +
+        `<span style="opacity:.75">${t('ext_cause')}:</span> ${cause}`
+      );
+    }
+    if (h.count > 0) return `${name} · ${h.count} ${t('ext_alive')}`;
+    return name; // history-less ancestor: just the name (current state unknown)
+  }
   // Muller legend: click a clade to name it.
   legend.addEventListener('click', (e) => {
     const tgt = (e.target as HTMLElement).closest<HTMLElement>('[data-rename]');
@@ -675,6 +737,12 @@ export function buildEvolutionHistory(): HistoryPanel {
     birth: number; // birth tick (or estimated for history-less ancestors)
     col: number; // column index by birth order
     y: number; // tidy y slot
+    peak: number; // largest population it reached (sizes extinct nodes)
+    tracked: boolean; // has a real history entry (vs an estimated ancestor)
+    extinct: boolean;
+    deathTick: number;
+    causeKey: string;
+    causeDetail: number;
   }
 
   const fmtTick = (tk: number): string =>
@@ -704,15 +772,23 @@ export function buildEvolutionHistory(): HistoryPanel {
           birth: l ? l.birthTick : -1,
           col: 0,
           y: 0,
+          peak: l ? l.peak : 0,
+          tracked: !!l,
+          extinct: l?.extinct ?? false,
+          deathTick: l?.deathTick ?? 0,
+          causeKey: l?.causeKey ?? '',
+          causeDetail: l?.causeDetail ?? 0,
         };
         nodes.set(id, nd);
       }
       return nd;
     };
+    // Rank by the BIGGER of current and peak population, so notable EXTINCT clades
+    // show up in the tree alongside the survivors (not just living ones).
     const top = [...lineages]
-      .filter((l) => l.count > 0)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 16);
+      .filter((l) => Math.max(l.count, l.peak) > 0)
+      .sort((a, b) => Math.max(b.count, b.peak) - Math.max(a.count, a.peak))
+      .slice(0, 18);
     for (const l of top) {
       add(l.lineage);
       let id = l.lineage;
@@ -745,6 +821,9 @@ export function buildEvolutionHistory(): HistoryPanel {
       return nd.birth;
     };
     roots.forEach(estimate);
+    // Safety: any node not reached by the recursion (e.g. a parent-pointer cycle)
+    // keeps birth -1 — clamp it so the tick axis never shows a bogus negative.
+    for (const nd of nodes.values()) if (nd.birth < 0) nd.birth = 0;
 
     // x = column by birth order (even spacing); real ticks go on the axis.
     const ordered = [...nodes.values()].sort((a, b) => a.birth - b.birth || a.id - b.id);
@@ -827,32 +906,78 @@ export function buildEvolutionHistory(): HistoryPanel {
       }
     }
 
-    // nodes: glowing discs + name labels above; record hit-boxes for rename
+    // nodes: living clades glow; extinct ones are a hollow ring with an ✕ (sized by
+    // their former peak) so the dead branches read at a glance. Record hit-boxes for
+    // rename (click) + the extinction story (hover).
     treeHits = [];
     ctx.textBaseline = 'middle';
+    const pushHit = (nd: TNode, x: number, y: number, r: number): void => {
+      treeHits.push({
+        id: nd.id,
+        x,
+        y,
+        r,
+        count: nd.count,
+        extinct: nd.extinct,
+        deathTick: nd.deathTick,
+        causeKey: nd.causeKey,
+        causeDetail: nd.causeDetail,
+      });
+    };
     for (const nd of nodes.values()) {
       const x = px(nd.col);
       const y = py(nd.y);
-      const r = 4 + Math.min(13, Math.sqrt(nd.count));
-      const col = `hsl(${Math.round(nd.hue * 360)}, 85%, 60%)`;
-      ctx.save();
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = col;
-      ctx.fill();
-      ctx.restore();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.stroke();
+      const hue = Math.round(nd.hue * 360);
+      if (nd.extinct) {
+        const r = 4 + Math.min(12, Math.sqrt(nd.peak));
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = `hsla(${hue}, 55%, 62%, 0.7)`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        // an ✕ across the ring = this branch ended
+        const d = r * 0.6;
+        ctx.strokeStyle = `hsla(${hue}, 55%, 70%, 0.55)`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x - d, y - d);
+        ctx.lineTo(x + d, y + d);
+        ctx.moveTo(x + d, y - d);
+        ctx.lineTo(x - d, y + d);
+        ctx.stroke();
+        pushHit(nd, x, y, Math.max(r, 8));
+      } else if (nd.count > 0) {
+        const r = 4 + Math.min(13, Math.sqrt(nd.count));
+        const col = `hsl(${hue}, 85%, 60%)`;
+        ctx.save();
+        ctx.shadowColor = col;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.restore();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.stroke();
+        pushHit(nd, x, y, r);
+      } else {
+        // history-less ancestor: a faint marker (no known cause)
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 50%, 60%, 0.45)`;
+        ctx.fill();
+        pushHit(nd, x, y, 8);
+      }
+      const r = nd.extinct
+        ? 4 + Math.min(12, Math.sqrt(nd.peak))
+        : 4 + Math.min(13, Math.sqrt(nd.count));
       const name = displayLineage(nd.id);
       const label = name.length > 14 ? name.slice(0, 13) + '…' : name;
       ctx.font = '10.5px ui-monospace, monospace';
       ctx.textAlign = 'center';
-      ctx.fillStyle = nd.count > 0 ? 'rgba(207,232,255,0.85)' : 'rgba(207,232,255,0.45)';
+      ctx.fillStyle = nd.count > 0 ? 'rgba(207,232,255,0.85)' : 'rgba(207,232,255,0.5)';
       ctx.fillText(label, x, y - r - 9);
-      treeHits.push({ id: nd.id, x, y, r });
     }
   }
 
@@ -861,7 +986,7 @@ export function buildEvolutionHistory(): HistoryPanel {
     h1.textContent = `PELAGIA · ${t('ph_title')}`;
     note.textContent = t('ph_note');
     timeLbl.textContent = t('ph_time');
-    treeLbl.textContent = `${t('ph_tree')} — ${t('hist_births')}`;
+    treeLbl.textContent = `${t('ph_tree')} — ${t('hist_births')} · ${t('hist_extinctHint')}`;
     drawMuller(last);
     renderLegend(last);
     drawTree(last, lastParents, lastTick);
