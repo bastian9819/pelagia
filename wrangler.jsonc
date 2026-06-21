@@ -1,0 +1,12 @@
+{
+  // PELAGIA is a pure static site (Vite -> dist). This deploys it on Cloudflare
+  // as an assets-only Worker (no server code): wrangler just uploads `dist`.
+  // Having this file stops wrangler from trying to auto-configure a Vite plugin
+  // on deploy (which fails on a config without a `plugins` array).
+  "name": "pelagia",
+  "compatibility_date": "2026-06-21",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+  },
+}
