@@ -16,7 +16,7 @@ import {
 } from '../sim/brain.js';
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
-import { makeDraggable, mkPanelHeader } from './ui.js';
+import { makeDraggable, makeResizable, mkPanelHeader } from './ui.js';
 import { attachTooltip } from './tooltip.js';
 import { lineageLabelHtml, onLineageNamesChange } from './lineageNames.js';
 import { openLineageRename } from './lineageRename.js';
@@ -163,6 +163,7 @@ export function buildLineagePanel(): LineagePanel {
   const { header: phead, title } = mkPanelHeader(() => (panel.style.display = 'none'));
   panel.append(phead);
   makeDraggable(panel, phead);
+  makeResizable(panel);
   attachTooltip(title, 'panel_lineage');
   const list = document.createElement('div');
   list.style.cssText = 'font:12px var(--font-ui);overflow:auto;flex:1;';

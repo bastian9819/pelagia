@@ -8,7 +8,7 @@
  */
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
-import { makeDraggable } from './ui.js';
+import { makeDraggable, makeResizable } from './ui.js';
 import { attachTooltip } from './tooltip.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
 import {
@@ -247,6 +247,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   scroll.append(lineageBar, canvas, legend, policyLabel, policy, listens, stats, tapeLabel, tape);
   panel.append(header, scroll);
   makeDraggable(panel, header);
+  makeResizable(panel, { minW: 320 });
   attachTooltip(title, 'panel_brain');
   attachTooltip(policyLabel, 'brain_policy');
   attachTooltip(tapeLabel, 'brain_eeg');

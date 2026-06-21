@@ -10,7 +10,7 @@
  */
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
-import { makeDraggable, mkPanelHeader } from './ui.js';
+import { makeDraggable, makeResizable, mkPanelHeader } from './ui.js';
 import { attachTooltip } from './tooltip.js';
 
 export interface GodSpec {
@@ -49,6 +49,7 @@ export function buildGodPanel(
   const { header: phead, title } = mkPanelHeader(() => (panel.style.display = 'none'));
   panel.append(phead);
   makeDraggable(panel, phead);
+  makeResizable(panel);
 
   const scroll = document.createElement('div');
   scroll.style.cssText = 'overflow:auto;flex:1;';

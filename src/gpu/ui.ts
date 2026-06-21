@@ -113,6 +113,75 @@ export function makeDraggable(panel: HTMLElement, handle: HTMLElement): void {
 }
 
 /**
+ * Make `panel` resizable via a grip in its bottom-right corner. The panel is a
+ * flex column (fixed header + a `flex:1; overflow:auto` body), so setting an
+ * explicit width/height just resizes the scrolling body. Clamped to [min, viewport].
+ */
+export function makeResizable(
+  panel: HTMLElement,
+  opts: { minW?: number; minH?: number } = {},
+): void {
+  const minW = opts.minW ?? 200;
+  const minH = opts.minH ?? 140;
+  const grip = document.createElement('div');
+  grip.innerHTML = icon('grip', 16);
+  grip.style.cssText =
+    'position:absolute;right:2px;bottom:2px;width:16px;height:16px;cursor:nwse-resize;' +
+    'color:var(--ink-faint);z-index:3;touch-action:none;line-height:0;';
+  panel.appendChild(grip);
+
+  let resizing = false;
+  let sx = 0;
+  let sy = 0;
+  let sw = 0;
+  let sh = 0;
+  let left = 0;
+  let top = 0;
+  grip.addEventListener('pointerdown', (e) => {
+    resizing = true;
+    bringToFront(panel);
+    const r = panel.getBoundingClientRect();
+    // Anchor by left/top (clear right/bottom + the max-* caps) so it grows predictably.
+    panel.style.left = `${r.left}px`;
+    panel.style.top = `${r.top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.maxHeight = 'none';
+    panel.style.maxWidth = 'none';
+    left = r.left;
+    top = r.top;
+    sx = e.clientX;
+    sy = e.clientY;
+    sw = r.width;
+    sh = r.height;
+    try {
+      grip.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!resizing) return;
+    const maxW = window.innerWidth - left - 8;
+    const maxH = window.innerHeight - top - 8;
+    panel.style.width = `${Math.max(minW, Math.min(maxW, sw + (e.clientX - sx)))}px`;
+    panel.style.height = `${Math.max(minH, Math.min(maxH, sh + (e.clientY - sy)))}px`;
+  });
+  const end = (e: PointerEvent): void => {
+    resizing = false;
+    try {
+      grip.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+}
+
+/**
  * A draggable panel header: an eyebrow title on the left and a close (×) button on
  * the right. Returns the header (the drag handle) + the title element to fill in.
  */
