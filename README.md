@@ -52,4 +52,10 @@ install, no per-use cost — it all runs on your machine.
 
 ## License
 
-TBD before launch (see `DECISIONS.md` P-001).
+PELAGIA is free software under the **GNU Affero General Public License v3.0 or
+later** (AGPL-3.0) — see [`LICENSE`](./LICENSE). You're free to use, study, share
+and modify it; but any modified or hosted/network version you distribute must also
+be released as open source under the AGPL. This keeps PELAGIA open and prevents it
+from being taken proprietary.
+
+Copyright © 2026 bastian9819
