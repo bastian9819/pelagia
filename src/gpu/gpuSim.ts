@@ -44,6 +44,7 @@ import {
   type WatchSample,
 } from './observatory.js';
 import { t, onLang } from './i18n.js';
+import { setLineageSeed } from './lineageNames.js';
 import { parseShareState, buildShareUrl, applyHash, copyToClipboard } from './share.js';
 import inspectShader from './shaders/inspect.wgsl?raw';
 
@@ -71,6 +72,7 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
   // drives both the CPU-side init below and the GPU shader RNG (via pu[23]).
   const share = parseShareState();
   const seed = (share?.seed ?? Math.floor(Math.random() * 0x100000000)) >>> 0;
+  setLineageSeed(seed); // custom lineage names are namespaced + persisted per seed
   const requestedN = share?.n ?? opts.n;
   const { device, format } = await initGpu();
   device.addEventListener('uncapturederror', (e) => {

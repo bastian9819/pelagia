@@ -124,6 +124,8 @@ const S: Dict = {
   straight: { en: '— straight', es: '— recto' },
   deceased: { en: 'deceased', es: 'muerta' },
   lineageWord: { en: 'lineage', es: 'linaje' },
+  nameLineage: { en: 'name this lineage', es: 'nombrar este linaje' },
+  namePlaceholder: { en: 'name this lineage…', es: 'nombra este linaje…' },
   energyWord: { en: 'energy', es: 'energía' },
   speedWord: { en: 'speed', es: 'velocidad' },
   sizeWord: { en: 'size', es: 'tamaño' },

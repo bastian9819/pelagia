@@ -11,6 +11,12 @@ import { icon } from './icons.js';
 import { makeDraggable } from './ui.js';
 import { attachTooltip } from './tooltip.js';
 import { INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE, WEIGHT_GENES, forward } from '../sim/brain.js';
+import {
+  getLineageName,
+  setLineageName,
+  lineageLabelHtml,
+  onLineageNamesChange,
+} from './lineageNames.js';
 
 export interface BrainView {
   panel: HTMLElement;
@@ -109,6 +115,82 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
   right.append(track, close);
   header.append(title, right);
 
+  // Editable lineage bar: the selected creature's lineage name (or #id) with a
+  // pencil to christen the clade — a name layer over the functional id (P-003).
+  const lineageBar = document.createElement('div');
+  lineageBar.style.cssText =
+    'display:flex;align-items:center;gap:7px;margin-top:8px;min-height:24px;font-size:12.5px;';
+  const lDot = document.createElement('span');
+  lDot.style.cssText =
+    'display:inline-block;width:10px;height:10px;border-radius:50%;flex:none;background:#888;';
+  const lLabel = document.createElement('span');
+  lLabel.style.cssText =
+    'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+  const lEdit = document.createElement('button');
+  lEdit.className = 'pg-btn pg-iconbtn';
+  lEdit.style.cssText = 'width:24px;height:24px;flex:none;';
+  lEdit.innerHTML = icon('pencil', 13);
+  lineageBar.append(lDot, lLabel, lEdit);
+
+  // Lineage identity tracked separately from the per-frame stats so an in-progress
+  // rename input is never clobbered (the bar re-renders only when it changes).
+  let curLineage = -1;
+  let curHue = 0;
+  let curAlive = true;
+  let editing = false;
+  let editInput: HTMLInputElement | null = null;
+
+  function renderLineageBar(): void {
+    if (editing) return; // don't overwrite the input mid-edit
+    lDot.style.background = `hsl(${Math.round(curHue * 360)}, 90%, 62%)`;
+    lLabel.innerHTML =
+      curLineage < 0
+        ? ''
+        : lineageLabelHtml(curLineage) +
+          (curAlive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`);
+    lEdit.style.display = curLineage < 0 ? 'none' : 'block';
+  }
+  function endEdit(save: boolean): void {
+    const input = editInput;
+    if (!input) return;
+    editInput = null;
+    editing = false;
+    if (save) setLineageName(curLineage, input.value);
+    input.remove();
+    lLabel.style.display = '';
+    lEdit.style.display = '';
+    renderLineageBar();
+  }
+  function beginEdit(): void {
+    if (curLineage < 0 || editing) return;
+    editing = true;
+    lLabel.style.display = 'none';
+    lEdit.style.display = 'none';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = getLineageName(curLineage) ?? '';
+    input.placeholder = t('namePlaceholder');
+    input.maxLength = 28;
+    input.setAttribute('aria-label', t('nameLineage'));
+    input.style.cssText =
+      'flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border-2);' +
+      'border-radius:6px;color:var(--ink);font:12.5px var(--font-ui);padding:3px 8px;outline:none;';
+    // Keep keystrokes off the global shortcuts (space=pause, H=hide UI, …).
+    input.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') endEdit(true);
+      else if (e.key === 'Escape') endEdit(false);
+    };
+    input.onblur = () => endEdit(true);
+    editInput = input;
+    lineageBar.insertBefore(input, lEdit);
+    input.focus();
+    input.select();
+  }
+  lEdit.onclick = beginEdit;
+  lEdit.title = t('nameLineage');
+  onLineageNamesChange(renderLineageBar); // a rename elsewhere re-labels the bar
+
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -162,7 +244,7 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
 
   const scroll = document.createElement('div');
   scroll.style.cssText = 'overflow:auto;flex:1;';
-  scroll.append(canvas, legend, policyLabel, policy, listens, stats, tapeLabel, tape);
+  scroll.append(lineageBar, canvas, legend, policyLabel, policy, listens, stats, tapeLabel, tape);
   panel.append(header, scroll);
   makeDraggable(panel, header);
   attachTooltip(title, 'panel_brain');
@@ -322,8 +404,10 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     title.textContent = t('creatureBrain');
     setTrack(false);
     close.title = t('close');
+    lEdit.title = t('nameLineage');
     tapeLabel.textContent = t('eeg_title');
     relabelLegend();
+    renderLineageBar();
     refreshPolicy();
     drawTape();
   });
@@ -397,6 +481,11 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
     panel,
     setGenome(g) {
       genome = g;
+      endEdit(false); // selection changed -> drop any in-progress rename
+      if (g === null) {
+        curLineage = -1;
+        renderLineageBar();
+      }
       clearTape(); // new selection -> fresh tape
       refreshPolicy();
     },
@@ -416,6 +505,12 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       const hue = d[35]!;
       const lineage = Math.round(d[36]!);
       const alive = d[37]! >= 0.5;
+      if (lineage !== curLineage || hue !== curHue || alive !== curAlive) {
+        curLineage = lineage;
+        curHue = hue;
+        curAlive = alive;
+        renderLineageBar();
+      }
       const neurons = Math.round(d[38]!);
       const bodySize = d[39]!;
       const elong = d[40]!;
@@ -431,10 +526,8 @@ export function buildBrainView(onClose: () => void, onTrack: () => void): BrainV
       const thrust = (outputs[1]! + 1) / 2;
       const attack = outputs[2]!;
       const turnTxt = turn > 0.1 ? t('turnRight') : turn < -0.1 ? t('turnLeft') : t('straight');
-      const hueCss = `hsl(${Math.round(hue * 360)}, 90%, 62%)`;
+      // Lineage identity (name/#id + deceased) now lives in the editable lineageBar.
       stats.innerHTML =
-        `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${hueCss};margin-right:6px"></span>` +
-        `${t('lineageWord')} #${lineage}${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>` +
         `<div>${t('energyWord')} ${energy.toFixed(1)} · ${t('speedWord')} ${speed.toFixed(1)} · ` +
         `${t('sizeWord')} ${bodySize.toFixed(2)}×</div>` +
         `<div>${t('shapeWord')} ${shapeTxt} · ${t('glowWord')} ${glow.toFixed(2)}× · ${t('tempPref')} ${thermalTxt}` +

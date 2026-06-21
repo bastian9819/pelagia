@@ -18,6 +18,7 @@ import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
 import { makeDraggable, mkPanelHeader } from './ui.js';
 import { attachTooltip } from './tooltip.js';
+import { lineageLabelHtml, onLineageNamesChange } from './lineageNames.js';
 
 const inp = new Float32Array(INPUT_SIZE);
 const hid = new Float32Array(HIDDEN_SIZE);
@@ -217,7 +218,7 @@ export function buildLineagePanel(): LineagePanel {
     return (
       `<div style="margin-bottom:11px;line-height:1.45">` +
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
-      `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span>` +
+      `${lineageLabelHtml(r.lineage)} · ${r.count} <span style="color:${ac}">${arrow}</span>` +
       `<div style="opacity:.7;margin-left:16px;margin-top:2px">${desc}</div>` +
       `<div style="margin-left:16px;margin-top:3px">${traits}</div></div>`
     );
@@ -246,6 +247,7 @@ export function buildLineagePanel(): LineagePanel {
   }
   render();
   onLang(render);
+  onLineageNamesChange(render); // a rename elsewhere re-labels the panel
 
   return {
     panel,

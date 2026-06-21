@@ -16,6 +16,7 @@
 import { t, onLang } from './i18n.js';
 import { icon } from './icons.js';
 import { pcgHash, floatFromU32 } from '../core/rng.js';
+import { lineageLabelHtml, displayLineage, onLineageNamesChange } from './lineageNames.js';
 
 /** Lineage colour from its id — matches the GPU's per-creature hue. */
 const hueOf = (id: number): number => floatFromU32(pcgHash(id));
@@ -387,7 +388,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       left.style.cssText = 'flex:1;min-width:0';
       left.innerHTML =
         `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
-        `<b>#${r.lineage}</b> · ${r.count} <span style="color:${ac}">${arrow}</span></div>` +
+        `${lineageLabelHtml(r.lineage)} · ${r.count} <span style="color:${ac}">${arrow}</span></div>` +
         `<div style="opacity:.7;margin-left:16px">${t(r.descKey)} · ${t(r.fast ? 'fast' : 'slow')}</div>` +
         `<div style="opacity:.5;margin-left:16px;font-size:11px">` +
         `${t('tr_seek')} ${r.seek.toFixed(2)} · ${t('tr_forage')} ${r.forage.toFixed(2)} · ` +
@@ -418,7 +419,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
       head.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
       head.innerHTML =
         `<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px"></span>` +
-        `<b>#${wch.id}</b> · ${t('lineageWord')} #${wch.lineage}` +
+        `<b>#${wch.id}</b> · ${t('lineageWord')} ${lineageLabelHtml(wch.lineage)}` +
         `${alive ? '' : ` · <span style="color:#ff5aa6">${t('deceased')}</span>`}</div>`;
       const rm = document.createElement('button');
       rm.innerHTML = icon('close', 15);
@@ -477,6 +478,7 @@ export function buildObservatory(onRemoveWatch: (id: number) => void): Observato
     relabelToggle();
     render();
   });
+  onLineageNamesChange(render); // a rename re-labels the lineage rows/watch-list
 
   return {
     panel,
@@ -612,7 +614,7 @@ export function buildEvolutionHistory(): HistoryPanel {
         const c = `hsl(${Math.round(l.hue * 360)}, 85%, 58%)`;
         return (
           `<span style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;` +
-          `border-radius:2px;background:${c};margin-right:5px"></span>#${l.lineage} · ${l.count} · ${t(l.descKey)}</span>`
+          `border-radius:2px;background:${c};margin-right:5px"></span>${displayLineage(l.lineage)} · ${l.count} · ${t(l.descKey)}</span>`
         );
       })
       .join('');
@@ -744,6 +746,7 @@ export function buildEvolutionHistory(): HistoryPanel {
     relabelToggle();
     render();
   });
+  onLineageNamesChange(render); // a rename re-labels the Muller legend
 
   return {
     panel,
