@@ -12,11 +12,10 @@ neural brain firing in real time, and share your exact ocean with a URL.
 
 ---
 
-> ⚠️ **Work in progress.** PELAGIA is being built in public, phase by phase. The
-> current focus is **Phase 0**: proving that interesting adaptive behaviour
-> actually emerges before investing in scale and visuals. See
-> [`ROADMAP.md`](./ROADMAP.md) for the full plan and [`STATE.md`](./STATE.md) for
-> where things stand right now.
+> **Status:** the full ocean is live — GPU simulation of thousands of evolving
+> neural creatures, a real-time brain inspector, lineage explorer + family tree,
+> god mode, share-by-URL, procedural creature art and a touch/mobile-ready UI. It
+> falls back to a reduced CPU version where WebGPU isn't available.
 
 ## Quick start
 

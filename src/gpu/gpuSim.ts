@@ -1929,16 +1929,20 @@ export async function runGpuSim(canvas: HTMLCanvasElement, opts: OceanOptions): 
     });
   }
 
-  // --- Chemotaxis validation hook (read GPU state back, compute on CPU) ---
-  (globalThis as unknown as { __pelagia: unknown }).__pelagia = {
-    n,
-    f,
-    seed,
-    get tick() {
-      return frame;
-    },
-    readChemotaxis,
-  };
+  // --- Chemotaxis validation hook (read GPU state back, compute on CPU). Dev-only:
+  // statically stripped from production builds so we don't expose internals on
+  // window in the shipped app. ---
+  if (import.meta.env.DEV) {
+    (globalThis as unknown as { __pelagia: unknown }).__pelagia = {
+      n,
+      f,
+      seed,
+      get tick() {
+        return frame;
+      },
+      readChemotaxis,
+    };
+  }
   async function readChemotaxis(): Promise<unknown> {
     const sRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });
     const bRead = device.createBuffer({ size: n * 16, usage: GPUBufferUsage.MAP_READ | CD });

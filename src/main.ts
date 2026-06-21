@@ -110,7 +110,10 @@ function runCpuView(target: HTMLCanvasElement): void {
 
   const world = new World({ ...DEFAULT_CONFIG, seed });
   for (let i = 0; i < warmup; i++) world.step();
-  (globalThis as unknown as { __pelagia: unknown }).__pelagia = { world };
+  // Dev-only debug handle (stripped from production builds).
+  if (import.meta.env.DEV) {
+    (globalThis as unknown as { __pelagia: unknown }).__pelagia = { world };
+  }
 
   const ctx = target.getContext('2d');
   if (!ctx) throw new Error('2D context unavailable');
