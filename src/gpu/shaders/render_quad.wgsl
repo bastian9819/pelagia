@@ -29,7 +29,8 @@ struct VSOut {
   @builtin(position) pos: vec4<f32>,
   @location(0) uv: vec2<f32>,
   @location(1) color: vec3<f32>,
-  @location(2) fin: f32, // tail-filament length (cosmetic morphology)
+  @location(2) fin: f32,  // caudal-fin size (FIN gene)
+  @location(3) seed: f32, // per-lineage seed (drives the body pattern)
 };
 
 fn hue2rgb(h: f32) -> vec3<f32> {
@@ -107,19 +108,80 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
   if (R.hl.y > 0.5 && abs(b.w - R.hl.x) > 0.5) { dim = 0.1; }
   // Brighter creatures literally glow more (evolved bioluminescence).
   out.color = col * R.brightness * dim * glow;
+  out.seed = b.y; // lineage hue doubles as a stable per-family pattern seed
   return out;
 }
 
 @fragment
 fn fs(in: VSOut) -> @location(0) vec4<f32> {
-  let u = in.uv;
-  // Tadpole body: narrower across (x), elongated along the heading (y).
-  let body = smoothstep(1.0, 0.0, length(vec2<f32>(u.x * 1.7, u.y)));
-  // Bright head toward the front (+y); a faint tail behind it.
-  let head = smoothstep(0.55, 0.0, length(vec2<f32>(u.x * 1.6, u.y - 0.35)));
-  // Evolved tail filament: a thin glowing streak trailing behind, length/strength
-  // set by the FIN gene — pure silhouette variety so creatures look distinct.
-  let tail = smoothstep(0.14, 0.0, abs(u.x)) * smoothstep(-0.2, -1.0, u.y) * in.fin;
-  let intensity = body * body * 0.45 + head * 1.5 + tail * 0.7;
+  // Local coords: +y is the front (head), -y the back (tail). The billboard is
+  // already oriented + stretched by elongation in the vertex stage.
+  let x = in.uv.x;
+  let t = in.uv.y;
+  let fin = in.fin;
+
+  // Per-lineage BODY PLAN: the lineage seed picks one of three archetypes, so
+  // different clades read as different kinds of creature (and speciation spawns new
+  // looks). The evolved genes (elongation, fin, glow) still shape each individual.
+  let sel = fract(in.seed * 3.71 + 0.19);
+
+  // Family-specific banding pattern (stronger than before, for more texture).
+  let freq = 6.0 + fract(in.seed * 9.0) * 11.0;
+  let bands = 0.74 + 0.26 * sin(t * freq + in.seed * 6.28318);
+
+  var intensity = 0.0;
+
+  if (sel < 0.36) {
+    // ---------- LEAF / PETAL: a graceful glowing teardrop ----------
+    let prof = clamp(smoothstep(-0.92, -0.15, t) * smoothstep(0.72, -0.05, t), 0.0, 1.0);
+    let halfW = 0.4 * pow(prof, 0.62);
+    let edge = halfW - abs(x);
+    let body = smoothstep(0.0, 0.12, edge);
+    let spine = smoothstep(0.12, 0.0, abs(x)) * body;
+    let rim = smoothstep(0.05, 0.0, abs(edge)) * step(0.04, prof);
+    let head = smoothstep(0.32, 0.0, length(vec2<f32>(x * 1.25, t - 0.4)));
+    let tb = -t - 0.5;
+    let fl = 0.28 + 0.4 * fin;
+    let flare = smoothstep(0.0, 0.05, tb) * smoothstep(fl, 0.0, tb);
+    let tailHalf = 0.03 + flare * (0.09 + 0.28 * fin);
+    let caudal = smoothstep(0.045, 0.0, abs(x) - tailHalf) * step(0.0, tb);
+    intensity = body * 0.46 * bands + spine * 0.5 + rim * 0.75 + head * 1.7 + caudal * 0.8;
+  } else if (sel < 0.7) {
+    // ---------- FISH: streamlined body + bright head + a clear FORKED tail ----------
+    let prof = clamp(smoothstep(-0.55, -0.05, t) * smoothstep(0.85, -0.1, t), 0.0, 1.0);
+    let halfW = 0.27 * pow(prof, 0.55);
+    let edge = halfW - abs(x);
+    let body = smoothstep(0.0, 0.11, edge);
+    let spine = smoothstep(0.1, 0.0, abs(x)) * body;
+    let rim = smoothstep(0.05, 0.0, abs(edge)) * step(0.04, prof);
+    let head = smoothstep(0.28, 0.0, length(vec2<f32>(x * 1.3, t - 0.36)));
+    // Forked caudal tail: a fan bright at its two outer lobes and dim in the central
+    // notch — the iconic fish-tail read. Size set by the FIN gene.
+    let tb = -t - 0.4;
+    let fl = 0.32 + 0.42 * fin;
+    let env = smoothstep(0.0, 0.05, tb) * smoothstep(fl, 0.0, tb);
+    let fanHalf = env * (0.15 + 0.45 * fin);
+    let lobe = smoothstep(0.05, 0.0, abs(x) - fanHalf) * step(0.0, tb);
+    let notch = smoothstep(0.0, 0.13, abs(x)); // 0 in the centre, 1 toward the lobes
+    let caudal = lobe * (0.3 + 0.7 * notch);
+    intensity = body * 0.44 * bands + spine * 0.5 + rim * 0.7 + head * 1.6 + caudal * 1.0;
+  } else {
+    // ---------- JELLY / MEDUSA: a bright bell with soft trailing tentacles ----------
+    let d = length(vec2<f32>(x * 1.05, (t - 0.2) * 0.9));
+    let bell = smoothstep(0.55, 0.0, d);
+    let bellRim = smoothstep(0.08, 0.0, abs(d - 0.5)) * step(t, 0.3);
+    // a few softly-waving tentacle filaments trailing behind the bell (FIN = length)
+    var tent = 0.0;
+    let len = 0.7 + 0.5 * fin;
+    for (var k = 0; k < 3; k = k + 1) {
+      let off = (f32(k) - 1.0) * 0.18;
+      let wob = 0.1 * sin(t * 7.0 + f32(k) * 2.1 + in.seed * 18.0);
+      let along = smoothstep(0.2, 0.2 - len, t); // fade with distance behind the bell
+      tent = tent + smoothstep(0.035, 0.0, abs(x - off - wob)) * along;
+    }
+    tent = tent * step(t, 0.24) * (0.5 + 0.5 * fin);
+    intensity = bell * 1.55 * bands + bellRim * 0.8 + tent * 0.55;
+  }
+
   return vec4<f32>(in.color * intensity, 1.0); // additive blend
 }
