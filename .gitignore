@@ -21,3 +21,11 @@ pnpm-debug.log*
 
 
 
+
+# Internal planning / dev notes — kept local, not published (contain working
+# decisions and process notes, not needed to build or run the app).
+DECISIONS.md
+STATE.md
+ROADMAP.md
+RISKS.md
+LAUNCH.md
