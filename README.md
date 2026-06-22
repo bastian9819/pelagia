@@ -14,7 +14,7 @@ neural brain firing in real time, and share your exact ocean with a URL.
 
 <p align="center">
   <a href="https://pelagia.phaino.dev">
-    <img src="./public/og.svg" alt="PELAGIA — an ocean of artificial life" width="680" />
+    <img src="./public/og.png" alt="PELAGIA — an ocean of artificial life" width="680" />
   </a>
 </p>
 
