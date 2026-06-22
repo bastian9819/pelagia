@@ -19,11 +19,7 @@ pnpm-debug.log*
 # Vite
 .vite
 
-
-
-
-# Internal planning / dev notes — kept local, not published (contain working
-# decisions and process notes, not needed to build or run the app).
+# Local-only notes (not part of the build)
 DECISIONS.md
 STATE.md
 ROADMAP.md
